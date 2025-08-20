@@ -1,0 +1,10 @@
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/uninstall.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/simple_pure_pursuit_uninstall.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/simple_pure_pursuit.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/test.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/edit_cache.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/rebuild_cache.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/list_install_components.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/install.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/install/local.dir
+/aichallenge/build/simple_pure_pursuit/CMakeFiles/install/strip.dir

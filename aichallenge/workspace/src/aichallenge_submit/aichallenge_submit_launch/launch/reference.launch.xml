@@ -118,24 +118,38 @@
 
       <!-- Customizable -->
       <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen">
-            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_30km_from_garage.csv"/>
+            <param name="pitlane_trajectory" value="$(find-pkg-share simple_trajectory_generator)/data/pitlane_trajectory.csv"/>
+            <param name="raceline_trajectory" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_30km_from_garage.csv"/>
             <param name="z" value="6.5"/>
+            <param name="use_lap_switching" value="true"/>
       </node>
       
     </group>
   </group>
 
   <!-- Pure Pursuit -->
-  <let name="steering_tire_angle_gain_var" value="1.50" if="$(var simulation)"/>
-  <let name="steering_tire_angle_gain_var" value="1.639" unless="$(var simulation)"/>
+  <let name="steering_tire_angle_gain_var" value="1.75" if="$(var simulation)"/>
+  <let name="steering_tire_angle_gain_var" value="3.639" unless="$(var simulation)"/>
 
   <node pkg="simple_pure_pursuit" exec="simple_pure_pursuit" name="simple_pure_pursuit_node" output="screen">
     <param name="use_external_target_vel" value="false"/>
-    <param name="external_target_vel" value="10.0"/>
-    <param name="lookahead_gain" value="0.5"/>
-    <param name="lookahead_min_distance" value="3.5"/>
+    <param name="external_target_vel" value="12.0"/>
+    <param name="lookahead_gain" value="0.8"/>
+    <param name="lookahead_min_distance" value="3.0"/>
     <param name="speed_proportional_gain" value="1.0"/>
     <param name="steering_tire_angle_gain" value="$(var steering_tire_angle_gain_var)"/>
+
+    <!-- === 新しい予測平滑化パラメータ === -->
+    <param name="enable_predictive_control" value="true"/>        <!-- 予測制御ON/OFF -->
+    <param name="steering_smoothing_factor" value="1.0"/>        <!-- 平滑化係数 (0.6-0.9) -->
+    <param name="max_steering_rate" value="1.5"/>                <!-- 最大角速度 [rad/s] -->
+    <param name="prediction_horizon" value="3.5"/>                <!-- 予測時間 [s] -->
+    <param name="curvature_lookahead_gain" value="1.5"/>          <!-- 曲率ゲイン -->
+
+    <!-- ★★★ 新しく追加: 循環軌道対応パラメータ ★★★ -->
+    <param name="enable_circular_trajectory" value="true"/>       <!-- 循環軌道対応ON/OFF -->
+    <param name="circular_search_distance_ratio" value="0.8"/>    <!-- 循環検索範囲比率 (0.5-1.0) -->
+
 
     <remap from="input/kinematics" to="/localization/kinematic_state"/>
     <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
