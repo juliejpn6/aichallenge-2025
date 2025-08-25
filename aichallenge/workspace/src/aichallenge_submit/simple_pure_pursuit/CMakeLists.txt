@@ -1,23 +1,27 @@
 cmake_minimum_required(VERSION 3.8)
 project(simple_pure_pursuit)
 
-find_package(autoware_cmake REQUIRED)
-autoware_package()
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
-find_package(tf2 REQUIRED)
-find_package(tier4_autoware_utils REQUIRED)
-
 ament_auto_find_build_dependencies()
 
+# 既存のsimple_pure_pursuit（従来システム）
 ament_auto_add_executable(simple_pure_pursuit
   src/simple_pure_pursuit.cpp
 )
 
-# tf2とtier4_autoware_utilsを明示的にリンク
-target_link_libraries(simple_pure_pursuit
-  tf2::tf2
+# 新しい高度制御システム
+ament_auto_add_executable(enhanced_racing_control
+  src/enhanced_racing_control.cpp
 )
 
-ament_auto_package()
+# インストール設定
+ament_auto_package(
+  INSTALL_TO_SHARE
+    launch
+    config
+)
