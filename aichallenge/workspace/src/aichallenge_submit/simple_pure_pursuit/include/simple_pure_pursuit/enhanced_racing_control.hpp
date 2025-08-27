@@ -1,6 +1,6 @@
 /**
- * 高度レーシングMPC制御システム - ヘッダーファイル
- * お台場カート場 33秒台達成用
+ * 改良版高度レーシングMPC制御システム - ヘッダーファイル
+ * オーバーステア修正・蛇行抑制対応版
  */
 #pragma once
 
@@ -14,7 +14,7 @@
 #include <vector>
 #include <deque>
 
-namespace enhanced_racing_control
+namespace improved_racing_control
 {
 
 using AckermannControlCommand = autoware_auto_control_msgs::msg::AckermannControlCommand;
@@ -42,21 +42,23 @@ struct ControlOutput {
     double target_speed;
     double lookahead_distance;
     CornerAnalysis corner_info;
+    double stability_factor;
 };
 
 // 前方宣言
-class CornerAnalyzer;
-class RacingController;
+class ImprovedCornerAnalyzer;
+class ImprovedRacingController;
 
-class EnhancedRacingControl : public rclcpp::Node
+class ImprovedRacingControl : public rclcpp::Node
 {
 public:
-    EnhancedRacingControl();
-    ~EnhancedRacingControl() = default;
+    ImprovedRacingControl();
+    ~ImprovedRacingControl() = default;
 
 private:
     void onTimer();
     bool subscribeMessageAvailable();
+    void setupRosInterface();
     void publishDebugInfo(const ControlOutput& output);
 
     // ROS インターフェース
@@ -75,12 +77,13 @@ private:
     float wheel_base_;
     float max_speed_kmh_;
     float max_lateral_g_;
-    bool enable_advanced_control_;
     bool enable_debug_output_;
 
-    // 高度制御システム
-    std::unique_ptr<CornerAnalyzer> corner_analyzer_;
-    std::unique_ptr<RacingController> racing_controller_;
+    // 改良版制御システム
+    std::unique_ptr<ImprovedCornerAnalyzer> corner_analyzer_;
+    std::unique_ptr<ImprovedRacingController> racing_controller_;
 };
 
-}  // namespace enhanced_racing_control
+}  // namespace improved_racing_control
+
+#endif  // ENHANCED_RACING_CONTROL_HPP_

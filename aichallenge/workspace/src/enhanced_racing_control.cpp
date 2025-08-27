@@ -1,10 +1,10 @@
 /**
- * 改良版高度レーシング制御システム - 完全修正版
+ * 改良版高度レーシング制御システム - エラー修正版
  * 
  * 修正点：
- * 1. AckermannControlCommandのメンバー名を正しく修正
- * 2. 未使用変数・パラメータを完全削除
- * 3. 全コンパイルエラーの解消
+ * 1. AckermannControlCommandのメンバー名修正
+ * 2. 未使用変数・パラメータの整理
+ * 3. コンパイルエラーの解消
  */
 #include <rclcpp/rclcpp.hpp>
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
@@ -31,9 +31,11 @@ using TrajectoryPoint = autoware_auto_planning_msgs::msg::TrajectoryPoint;
 using Odometry = nav_msgs::msg::Odometry;
 using PointStamped = geometry_msgs::msg::PointStamped;
 using motion_utils::findNearestIndex;
+using tier4_autoware_utils::calcLateralDeviation;
+using tier4_autoware_utils::calcYawDeviation;
 
 // ============================================
-// 構造体定義
+// コーナー分析と車両状態構造体
 // ============================================
 
 struct CornerAnalysis {
@@ -179,14 +181,17 @@ private:
         
         double abs_curvature = std::abs(curvature);
         
-        // 未来の曲率（5点先を見る）
+        // 前後の曲率変化を解析
         double future_curvature = 0.0;
+        
+        // 未来の曲率（5点先を見る）
         const size_t future_points = 5;
         if (idx + future_points < trajectory.points.size()) {
             future_curvature = calculatePointCurvature(trajectory, idx + future_points);
         }
         
         // フェーズ判定ロジック（改良版）
+        // 【重要】出口検出を早期化してオーバーステア防止
         if (abs_curvature < 0.015) {
             return CornerAnalysis::STRAIGHT_OUT;
         }
@@ -419,13 +424,13 @@ private:
     
     double applyOversteerPrevention(double raw_steering, 
                                   const CornerAnalysis& analysis,
-                                  double /* current_speed */) {  // unused パラメータにコメント追加
+                                  double current_speed) {
         
         // フェーズベースゲイン
         double phase_gain = getPhaseBasedGain(analysis.phase);
         
         // 速度適応ゲイン
-        double speed_gain = calculateSpeedBasedGain();
+        double speed_gain = calculateSpeedBasedGain(current_speed);
         
         // オーバーステア防止ゲイン
         double oversteer_gain = calculateOversteerPreventionGain(analysis);
@@ -434,7 +439,7 @@ private:
         double adjusted_steering = raw_steering * phase_gain * speed_gain * oversteer_gain;
         
         // 変化率制限
-        double rate_limited_steering = applyRateLimit(adjusted_steering);
+        double rate_limited_steering = applyRateLimit(adjusted_steering, current_speed);
         
         return rate_limited_steering;
     }
@@ -456,9 +461,18 @@ private:
         }
     }
     
-    double calculateSpeedBasedGain() {
-        // 簡略化：固定値を返す
-        return 0.85;
+    double calculateSpeedBasedGain(double current_speed) {
+        const double base_speed = 8.0;
+        const double gain_reduction = 0.3;
+        
+        if (current_speed <= base_speed) {
+            return 1.0;
+        }
+        
+        double speed_factor = (current_speed - base_speed) / base_speed;
+        double gain = 1.0 - gain_reduction * std::min(speed_factor, 2.0);
+        
+        return std::max(gain, 0.4);
     }
     
     double calculateOversteerPreventionGain(const CornerAnalysis& analysis) {
@@ -495,11 +509,14 @@ private:
         return vibration_factor * type_factor;
     }
     
-    double applyRateLimit(double target_steering) {
+    double applyRateLimit(double target_steering, double current_speed) {
+        double speed_factor = std::min(current_speed / 10.0, 1.5);
+        double actual_max_rate = max_steering_rate_ / speed_factor;
+        
         double steering_diff = target_steering - last_steering_angle_;
         
         const double dt = 0.05;  // 20Hz前提
-        double max_change = max_steering_rate_ * dt;
+        double max_change = actual_max_rate * dt;
         
         if (std::abs(steering_diff) > max_change) {
             double limited_diff = std::copysign(max_change, steering_diff);
@@ -641,7 +658,7 @@ private:
         AckermannControlCommand cmd;
         cmd.stamp = get_clock()->now();
         
-        // ステアリング設定（正しいメンバー名使用）
+        // ステアリング設定（修正：正しいメンバー名を使用）
         cmd.lateral.steering_tire_angle = output.steering_angle * steering_tire_angle_gain_;
         
         // 速度制御

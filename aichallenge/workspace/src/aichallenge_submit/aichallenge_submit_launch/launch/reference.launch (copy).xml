@@ -128,59 +128,33 @@
   </group>
 
   <!-- Pure Pursuit -->
-  <let name="steering_tire_angle_gain_var" value="2.4" if="$(var simulation)"/>
+  <let name="steering_tire_angle_gain_var" value="2.5" if="$(var simulation)"/>
   <let name="steering_tire_angle_gain_var" value="3.639" unless="$(var simulation)"/>
 
-<node pkg="simple_pure_pursuit" exec="simple_pure_pursuit" name="simple_pure_pursuit_node" output="screen">
-  <param name="use_external_target_vel" value="false"/>
-  <param name="external_target_vel" value="12.0"/>
-  
-  <!-- 【変更前】lookahead_gain value="0.8" -->
-  <!-- 【パターン3変更点】軽度短縮でバランス調整 -->
-  <!-- 小さくする: 適度に近くを見る → 精度と安定性のバランス -->
-  <param name="lookahead_gain" value="0.72"/>
-  
-  <!-- 【変更前】lookahead_min_distance value="2.0" -->  
-  <!-- 【パターン3】最小距離は軽度調整 -->
-  <param name="lookahead_min_distance" value="3.0"/>
-  
-  <!-- 【変更前】speed_proportional_gain value="1.0" -->
-  <!-- 【パターン3変更点】タイム短縮のための速度制御強化 -->
-  <!-- 大きくする: より積極的な加減速 → 33秒台への挑戦 -->
-  <param name="speed_proportional_gain" value="1.15"/>
-  
-  <param name="steering_tire_angle_gain" value="$(var steering_tire_angle_gain_var)"/>
+  <node pkg="simple_pure_pursuit" exec="simple_pure_pursuit" name="simple_pure_pursuit_node" output="screen">
+    <param name="use_external_target_vel" value="false"/>
+    <param name="external_target_vel" value="12.0"/>
+    <param name="lookahead_gain" value="0.8"/>
+    <param name="lookahead_min_distance" value="2.0"/>
+    <param name="speed_proportional_gain" value="1.0"/>
+    <param name="steering_tire_angle_gain" value="$(var steering_tire_angle_gain_var)"/>
 
-  <!-- === パターン3: バランス最適化のための予測平滑化パラメータ === -->
-  <param name="enable_predictive_control" value="true"/>
-  
-  <!-- 【変更前】steering_smoothing_factor value="1.8" -->
-  <!-- 【パターン3】バランスの取れた平滑化 -->
-  <!-- オーバーステア抑制とレスポンス性の最適バランス -->
-  <param name="steering_smoothing_factor" value="1.80"/>
-  
-  <!-- 【変更前】max_steering_rate value="2.5" -->
-  <!-- 【パターン3】中程度のステアリング制限でバランス重視 -->
-  <!-- 急激な変化は抑制しつつ、必要な機敏さは保持 -->
-  <param name="max_steering_rate" value="1.70"/>
-  
-  <!-- 【変更前】prediction_horizon value="3.0" -->
-  <!-- 【パターン3】予測時間は軽度調整（バランス重視） -->
-  <param name="prediction_horizon" value="2.3"/>
-  
-  <!-- 【変更前】curvature_lookahead_gain value="2.5" -->
-  <!-- 【パターン3変更点】中程度の短縮効果 -->
-  <!-- 先読みしすぎを防止しつつ、極端な短縮は避ける -->
-  <param name="curvature_lookahead_gain" value="2.0"/>
+    <!-- === 新しい予測平滑化パラメータ === -->
+    <param name="enable_predictive_control" value="true"/>        <!-- 予測制御ON/OFF -->
+    <param name="steering_smoothing_factor" value="1.8"/>        <!-- 平滑化係数 (0.6-0.9) -->
+    <param name="max_steering_rate" value="2.5"/>                <!-- 最大角速度 [rad/s] -->
+    <param name="prediction_horizon" value="3.0"/>                <!-- 予測時間 [s] -->
+    <param name="curvature_lookahead_gain" value="2.5"/>          <!-- 曲率ゲイン -->
 
-  <!-- 循環軌道対応パラメータ（そのまま維持） -->
-  <param name="enable_circular_trajectory" value="true"/>
-  <param name="circular_search_distance_ratio" value="0.8"/>
+    <!-- ★★★ 新しく追加: 循環軌道対応パラメータ ★★★ -->
+    <param name="enable_circular_trajectory" value="true"/>       <!-- 循環軌道対応ON/OFF -->
+    <param name="circular_search_distance_ratio" value="0.8"/>    <!-- 循環検索範囲比率 (0.5-1.0) -->
 
-  <remap from="input/kinematics" to="/localization/kinematic_state"/>
-  <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
-  <remap from="output/control_cmd" to="/control/command/control_cmd"/>
-</node>
+
+    <remap from="input/kinematics" to="/localization/kinematic_state"/>
+    <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
+    <remap from="output/control_cmd" to="/control/command/control_cmd"/>
+  </node>
 
   <!-- Map -->
   <group>
