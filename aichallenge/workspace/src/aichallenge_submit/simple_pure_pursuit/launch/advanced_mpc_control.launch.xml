@@ -1,0 +1,43 @@
+<launch>
+  <arg name="use_sim_time" default="false"/>
+  
+  <!-- 完全MPC制御システム -->
+  <node pkg="simple_pure_pursuit" exec="advanced_mpc_controller" 
+        name="advanced_mpc_controller" output="screen">
+    
+    <!-- ===========================================
+         MPC基本パラメータ（trajectory追従性向上）
+         =========================================== -->
+    
+    <!-- MPC制御ON/OFF -->
+    <param name="enable_mpc" value="true"/>
+    
+    <!-- 予測時間 [秒] -->
+    <!-- 大きくすると：コーナー形状をより先まで予測、安定性UP、計算負荷UP -->
+    <!-- 小さくすると：応答性UP、短期最適化、長期形状見落とし -->
+    <!-- 推奨値：1.5-2.5秒 -->
+    <param name="mpc_prediction_time" value="1.8"/>
+    
+    <!-- trajectory追従重み -->
+    <!-- 大きくすると：軌道厳密追従、安全走行、タイム犠牲 -->
+    <!-- 小さくすると：自由度UP、タイム重視、軌道偏差リスク -->
+    <!-- 推奨値：15.0-30.0 -->
+    <param name="mpc_tracking_weight" value="20.0"/>
+    
+    <!-- 制御滑らかさ重み -->
+    <!-- 大きくすると：振動完全抑制、応答性低下 -->
+    <!-- 小さくすると：機敏制御、振動リスク -->
+    <!-- 推奨値：8.0-20.0 -->
+    <param name="mpc_smoothness_weight" value="12.0"/>
+    
+    <!-- トピック接続 -->
+    <remap from="input/kinematics" to="/localization/kinematic_state"/>
+    <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
+    <remap from="output/control_cmd" to="/control/command/control_cmd"/>
+    
+    <!-- デバッグ情報 -->
+    <remap from="debug/mpc_target_point" to="/control/debug/mpc_target_point"/>
+    <remap from="debug/mpc_status" to="/control/debug/mpc_status"/>
+  </node>
+  
+</launch>

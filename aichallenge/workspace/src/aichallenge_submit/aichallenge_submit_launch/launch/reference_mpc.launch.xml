@@ -1,0 +1,25 @@
+<launch>
+  <arg name="map_path" default="/aichallenge/workspace/src/aichallenge_submit/aichallenge_submit_launch/map"/>
+  <arg name="lanelet2_map_file" default="lanelet2_map.osm"/>
+  <arg name="pointcloud_map_file" default="pointcloud_map.pcd"/>
+  <arg name="use_sim_time" default="false"/>
+
+  <!-- 既存のlocalization, planning等はそのまま維持 -->
+  <!-- ... 他の設定は省略 ... -->
+
+  <!-- ===========================================
+       MPC制御システム（新規追加）
+       =========================================== -->
+  
+  <!-- 従来のPure Pursuit無効化 -->
+  <!-- <node pkg="simple_pure_pursuit" exec="simple_pure_pursuit" name="simple_pure_pursuit_node" output="screen"> -->
+  
+  <!-- 完全MPC制御システム有効化 -->
+  <include file="$(find-pkg-share simple_pure_pursuit)/launch/advanced_mpc_control.launch.xml">
+    <!-- パラメータファイル指定 -->
+    <arg name="config_file" value="$(find-pkg-share simple_pure_pursuit)/config/advanced_mpc_config.yaml"/>
+  </include>
+
+  <!-- 他の設定（Map, Localization等）はそのまま -->
+  
+</launch>
