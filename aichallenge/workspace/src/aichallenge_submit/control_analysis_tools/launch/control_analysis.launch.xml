@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- Control analysis tools launch (PlotJuggler only) -->
+  
+  <arg name="analysis_mode" default="plotjuggler" description="analysis mode: plotjuggler only"/>
+  <arg name="publish_rate" default="20.0" description="data publish rate Hz"/>
+  
+  <log message="=== Control Analysis Tools Starting ==="/>
+  <log message="Analysis Mode: $(var analysis_mode)"/>
+  <log message="PlotJuggler data publisher only available"/>
+
+  <!-- PlotJuggler Data Publisher (Only available functionality) -->
+  <group if="$(eval '&quot;$(var analysis_mode)&quot; == &quot;plotjuggler&quot; or &quot;$(var analysis_mode)&quot; == &quot;all&quot;')">
+    <log message="Starting PlotJuggler data publisher"/>
+    
+    <node pkg="control_analysis_tools" exec="plotjuggler_data_publisher" 
+          name="plotjuggler_data_publisher" output="screen">
+      <param name="publish_rate_hz" value="$(var publish_rate)"/>
+      <param name="delay_calculation_window" value="100"/>
+    </node>
+  </group>
+
+  <!-- Warning for invalid modes -->
+  <group unless="$(eval '&quot;$(var analysis_mode)&quot; == &quot;plotjuggler&quot; or &quot;$(var analysis_mode)&quot; == &quot;all&quot;')">
+    <log message="Warning: Invalid mode '$(var analysis_mode)'. Only 'plotjuggler' is supported."/>
+  </group>
+
+</launch>

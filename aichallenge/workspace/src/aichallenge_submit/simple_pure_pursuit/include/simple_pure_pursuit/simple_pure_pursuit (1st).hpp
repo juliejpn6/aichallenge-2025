@@ -50,8 +50,7 @@ private:
   
   // 制御機能フラグ
   bool enable_predictive_control_;        // 既存：予測制御
-  bool enable_delay_compensation_;        // 遅延補償制御
-  bool enable_speed_adaptive_control_;    // 新規：車速適応制御
+  bool enable_delay_compensation_;        // 新規：遅延補償制御
 
   // PIMPLパターンによる実装の隠蔽
   // 遅延補償システム、予測平滑化システム、軌道予測システムを含む

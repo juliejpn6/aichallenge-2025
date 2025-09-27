@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- 制御分析ツール統合launch -->
+  
+  <arg name="analysis_mode" default="all" description="analysis mode: 'browser', 'plotjuggler', 'logger', 'all'"/>
+  <arg name="browser_port" default="8080" description="browser server port"/>
+  <arg name="log_rate" default="50.0" description="logging rate Hz"/>
+  <arg name="publish_rate" default="20.0" description="data publish rate Hz"/>
+  
+  <log message="=== 制御分析ツール起動 ==="/>
+  <log message="分析モード: $(var analysis_mode)"/>
+
+  <!-- ブラウザ版リアルタイム監視 -->
+  <group if="$(eval '&quot;$(var analysis_mode)&quot; == &quot;browser&quot; or &quot;$(var analysis_mode)&quot; == &quot;all&quot;')">
+    <log message="ブラウザ版リアルタイム監視を起動します"/>
+    
+    <node pkg="control_analysis_tools" exec="browser_realtime_monitor" 
+          name="browser_realtime_monitor" output="screen">
+      <param name="server_port" value="$(var browser_port)"/>
+      <param name="max_data_points" value="200"/>
+      <param name="update_rate_hz" value="$(var publish_rate)"/>
+    </node>
+  </group>
+
+  <!-- PlotJuggler用データ配信 -->
+  <group if="$(eval '&quot;$(var analysis_mode)&quot; == &quot;plotjuggler&quot; or &quot;$(var analysis_mode)&quot; == &quot;all&quot;')">
+    <log message="PlotJuggler用データ配信を起動します"/>
+    
+    <node pkg="control_analysis_tools" exec="plotjuggler_data_publisher" 
+          name="plotjuggler_data_publisher" output="screen">
+      <param name="publish_rate_hz" value="$(var publish_rate)"/>
+      <param name="delay_calculation_window" value="100"/>
+    </node>
+  </group>
+
+  <!-- ログ収集システム -->
+  <group if="$(eval '&quot;$(var analysis_mode)&quot; == &quot;logger&quot; or &quot;$(var analysis_mode)&quot; == &quot;all&quot;')">
+    <log message="ログ収集システムを起動します"/>
+    
+    <node pkg="control_analysis_tools" exec="control_data_logger" 
+          name="control_data_logger" output="screen">
+      <param name="log_rate_hz" value="$(var log_rate)"/>
+      <param name="output_directory" value="/tmp"/>
+      <param name="auto_filename" value="true"/>
+    </node>
+  </group>
+
+</launch>

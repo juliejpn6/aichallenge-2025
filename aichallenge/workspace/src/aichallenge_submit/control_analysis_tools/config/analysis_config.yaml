@@ -1,0 +1,18 @@
+# 制御分析ツール設定ファイル
+
+browser_realtime_monitor:
+  ros__parameters:
+    server_port: 8080
+    max_data_points: 200
+    update_rate_hz: 20.0
+
+plotjuggler_data_publisher:
+  ros__parameters:
+    publish_rate_hz: 20.0
+    delay_calculation_window: 100
+
+control_data_logger:
+  ros__parameters:
+    log_rate_hz: 50.0
+    output_directory: "/tmp"
+    auto_filename: true

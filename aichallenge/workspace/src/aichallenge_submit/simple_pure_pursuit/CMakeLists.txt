@@ -14,11 +14,6 @@ ament_auto_add_executable(simple_pure_pursuit
   src/simple_pure_pursuit.cpp
 )
 
-# 新しい高度制御システム
-ament_auto_add_executable(enhanced_racing_control
-  src/enhanced_racing_control.cpp
-)
-
 # インストール設定
 ament_auto_package(
   INSTALL_TO_SHARE

@@ -1,0 +1,167 @@
+# modified_simple_pure_pursuit_config.yaml
+# 案1改修版：既存コードベース + シンプル遅延補償機能
+# ★ 0.2秒固定遅延補償、0.35rad/s角速度制限対応
+
+# ============ 基本制御パラメータ ============
+simple_pure_pursuit:
+  ros__parameters:
+    # 基本車両パラメータ（既存維持）
+    wheel_base: 2.14                     # ホイールベース [m]
+    steering_tire_angle_gain: 1.0        # ステアリングタイヤ角ゲイン
+    
+    # Pure Pursuit基本パラメータ（既存維持）
+    lookahead_gain: 1.0                  # 先読みゲイン
+    lookahead_min_distance: 1.0          # 最小先読み距離 [m]
+    speed_proportional_gain: 1.0         # 速度制御比例ゲイン
+    
+    # 速度制御設定（既存維持）
+    use_external_target_vel: false       # 外部目標速度使用フラグ
+    external_target_vel: 0.0             # 外部目標速度 [m/s]
+    
+    # ★ 案1追加仕様：遅延補償制御パラメータ
+    steering_smoothing_factor: 0.75      # ステアリング平滑化係数
+    max_steering_rate: 0.35              # ★ 最大操舵角速度 [rad/s] ※要求仕様
+    prediction_horizon: 2.0              # ★ 予測時間範囲 [s] （シンプル化）
+    curvature_lookahead_gain: 1.5        # 曲率先読みゲイン
+    enable_predictive_control: true      # ★ 遅延補償機能有効フラグ
+    
+    # 注記：output_delay は 0.2秒固定（ソースコード内定数）
+
+# ============ 現場対応プリセット設定 ============
+
+# 【安全重視設定】
+safe_mode:
+  ros__parameters:
+    lookahead_gain: 1.5                  # 長い先読み距離
+    lookahead_min_distance: 2.0          # 長い最小距離
+    speed_proportional_gain: 0.8         # ゆるやかな速度制御
+    steering_smoothing_factor: 0.85      # 強い平滑化
+    max_steering_rate: 0.25              # より安全な角速度制限
+    enable_predictive_control: true
+
+# 【標準設定】
+standard_mode:
+  ros__parameters:
+    lookahead_gain: 1.0                  # 標準先読み距離
+    lookahead_min_distance: 1.0          # 標準最小距離
+    speed_proportional_gain: 1.0         # 標準速度制御
+    steering_smoothing_factor: 0.75      # 標準平滑化
+    max_steering_rate: 0.35              # ★ 仕様準拠
+    enable_predictive_control: true
+
+# 【応答重視設定】
+responsive_mode:
+  ros__parameters:
+    lookahead_gain: 0.8                  # 短い先読み距離
+    lookahead_min_distance: 0.8          # 短い最小距離
+    speed_proportional_gain: 1.2         # 積極的な速度制御
+    steering_smoothing_factor: 0.65      # 軽い平滑化
+    max_steering_rate: 0.35              # ★ 仕様準拠（変更なし）
+    enable_predictive_control: true
+
+# 【緊急フェイルセーフ】
+emergency_mode:
+  ros__parameters:
+    lookahead_gain: 2.0                  # 非常に長い先読み
+    lookahead_min_distance: 3.0          # 非常に長い最小距離
+    speed_proportional_gain: 0.5         # 非常にゆるやかな制御
+    steering_smoothing_factor: 0.95      # 最大平滑化
+    max_steering_rate: 0.20              # 緊急時低速制限
+    enable_predictive_control: false     # 遅延補償無効（安全優先）
+
+# ============ 調整可能パラメータ一覧 ============
+
+adjustable_parameters:
+  # 【重要度：高】実行中変更頻度が高いパラメータ
+  high_priority:
+    max_steering_rate:
+      description: "最大操舵角速度制限 [rad/s]"
+      range: "0.15 - 0.35"
+      default: 0.35
+      impact: "小さい→安定、大きい→応答性"
+      
+    steering_smoothing_factor:
+      description: "ステアリング平滑化係数"
+      range: "0.5 - 0.95"
+      default: 0.75
+      impact: "大きい→安定、小さい→応答性"
+      
+    enable_predictive_control:
+      description: "遅延補償機能有効/無効"
+      values: "true/false"
+      default: true
+      impact: "true→通常、false→緊急時"
+  
+  # 【重要度：中】調整が必要になることがあるパラメータ
+  medium_priority:
+    lookahead_gain:
+      description: "先読みゲイン"
+      range: "0.5 - 2.0"
+      default: 1.0
+      impact: "大きい→安定、小さい→機敏"
+      
+    speed_proportional_gain:
+      description: "速度制御ゲイン"
+      range: "0.5 - 1.5"
+      default: 1.0
+      impact: "大きい→積極的、小さい→ゆるやか"
+  
+  # 【重要度：低】通常変更不要なパラメータ
+  low_priority:
+    prediction_horizon:
+      description: "予測時間範囲 [s]"
+      range: "1.0 - 3.0"
+      default: 2.0
+      impact: "計算負荷と予測精度のバランス"
+
+# ============ 固定仕様（変更不可） ============
+fixed_specifications:
+  output_delay: "0.2秒（ソースコード内定数）"
+  control_frequency: "100Hz（10ms周期）"
+  delay_compensation_method: "速度×時間による予測位置制御"
+  max_rate_enforcement: "1制御周期での厳密制限"
+
+# ============ 現場での段階的調整手順 ============
+field_adjustment_procedure:
+  step1_basic_check:
+    description: "基本動作確認"
+    preset: "standard_mode"
+    duration: "5分"
+    check_points: ["制御応答", "振動有無", "軌道追従性"]
+    
+  step2_safety_adjustment:
+    description: "安全性重視調整"
+    conditions: ["振動発生", "不安定な動作"]
+    actions: 
+      - "safe_modeプリセット適用"
+      - "max_steering_rate を 0.25 に変更"
+      - "steering_smoothing_factor を 0.85 に変更"
+    
+  step3_performance_tuning:
+    description: "性能最適化"
+    conditions: ["応答不足", "追従性不良"]
+    actions:
+      - "responsive_modeプリセット適用"
+      - "lookahead_gain を 0.8-1.2 で調整"
+      - "速度ゲインの微調整"
+    
+  step4_emergency_fallback:
+    description: "緊急時対応"
+    conditions: ["重大な制御問題"]
+    actions:
+      - "emergency_modeプリセット適用"
+      - "enable_predictive_control を false に変更"
+
+# ============ パラメータ変更コマンド例 ============
+# 
+# 基本的な変更：
+# ros2 param set /simple_pure_pursuit max_steering_rate 0.30
+# ros2 param set /simple_pure_pursuit steering_smoothing_factor 0.80
+# 
+# 緊急時：
+# ros2 param set /simple_pure_pursuit enable_predictive_control false
+# ros2 param set /simple_pure_pursuit max_steering_rate 0.20
+# 
+# 設定確認：
+# ros2 param get /simple_pure_pursuit max_steering_rate
+# ros2 param list /simple_pure_pursuit

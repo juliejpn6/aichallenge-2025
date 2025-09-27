@@ -1,4 +1,4 @@
-// simple_pure_pursuit.cpp - 車速適応制御対応版（段階3: リアルタイム最適化）
+// simple_pure_pursuit.cpp - 遅延補償機能追加版（段階1: 0.2秒遅延対策）
 // 既存ファイルを置き換えて使用
 
 #include "simple_pure_pursuit/simple_pure_pursuit.hpp"
@@ -21,130 +21,17 @@ using tier4_autoware_utils::calcLateralDeviation;
 using tier4_autoware_utils::calcYawDeviation;
 
 // ===========================
-// 車速適応制御システム（新規追加）
+// 遅延補償システム（新規追加）
 // ===========================
-class SpeedAdaptiveControlSystem
-{
-private:
-  // 基準速度（35km/h = 9.72m/s）でのベストパラメータ
-  double reference_speed_;           // 基準速度 (m/s)
-  double base_lookahead_gain_;       // 基準 lookahead_gain
-  double base_lookahead_min_distance_; // 基準 lookahead_min_distance
-  double base_speed_proportional_gain_; // 基準 speed_proportional_gain
-  
-  // 速度履歴（平滑化用）
-  std::deque<double> speed_history_;
-  bool initialized_;
-  
-public:
-  SpeedAdaptiveControlSystem() 
-    : reference_speed_(35.0 / 3.6),    // 35km/h を m/s に変換
-      base_lookahead_gain_(0.72),
-      base_lookahead_min_distance_(1.0),
-      base_speed_proportional_gain_(1.15),
-      initialized_(false)
-  {
-    speed_history_.resize(5, reference_speed_); // 基準速度で初期化
-  }
-  
-  void setReferenceParameters(double ref_speed_kmh, double lookahead_gain, 
-                            double lookahead_min_dist, double speed_prop_gain)
-  {
-    reference_speed_ = ref_speed_kmh / 3.6; // km/h → m/s 変換
-    base_lookahead_gain_ = lookahead_gain;
-    base_lookahead_min_distance_ = lookahead_min_dist;
-    base_speed_proportional_gain_ = speed_prop_gain;
-  }
-  
-  // 車速適応制御の核心機能
-  struct AdaptiveParameters {
-    double lookahead_gain;
-    double lookahead_min_distance;
-    double speed_proportional_gain;
-    double speed_factor;           // デバッグ用
-  };
-  
-  AdaptiveParameters calculateAdaptiveParameters(double current_speed)
-  {
-    // 1. 速度履歴更新（平滑化）
-    if (!initialized_) {
-      std::fill(speed_history_.begin(), speed_history_.end(), current_speed);
-      initialized_ = true;
-    }
-    
-    speed_history_.pop_front();
-    speed_history_.push_back(current_speed);
-    
-    // 2. 平均速度計算（ノイズ除去）
-    double avg_speed = 0.0;
-    for (double speed : speed_history_) {
-      avg_speed += speed;
-    }
-    avg_speed /= speed_history_.size();
-    
-    // 3. 速度係数計算（基準速度との比率）
-    double speed_factor = avg_speed / reference_speed_;
-    speed_factor = std::clamp(speed_factor, 0.3, 1.2); // 安全範囲に制限
-    
-    AdaptiveParameters params;
-    params.speed_factor = speed_factor;
-    
-    // 4. パラメータ適応計算（シンプルな線形調整）
-    
-    // lookahead_gain: 低速時は大きく（安定性重視）、高速時は基準値
-    if (speed_factor < 1.0) {
-      // 35km/h未満の場合の補正
-      params.lookahead_gain = base_lookahead_gain_ * (1.0 + (1.0 - speed_factor) * 0.4);
-    } else {
-      // 35km/h以上は基準値
-      params.lookahead_gain = base_lookahead_gain_;
-    }
-    
-    // lookahead_min_distance: 低速時は小さく（機敏性）、高速時は大きく（安定性）
-    if (speed_factor < 1.0) {
-      // 35km/h未満の場合の補正
-      params.lookahead_min_distance = base_lookahead_min_distance_ * (0.7 + speed_factor * 0.3);
-    } else {
-      // 35km/h以上は基準値
-      params.lookahead_min_distance = base_lookahead_min_distance_;
-    }
-    
-    // speed_proportional_gain: 低速時は大きく（応答性）、高速時は小さく（安定性）
-    if (speed_factor < 1.0) {
-      // 35km/h未満の場合の補正
-      params.speed_proportional_gain = base_speed_proportional_gain_ * (1.0 + (1.0 - speed_factor) * 0.5);
-    } else {
-      // 35km/h以上は基準値か若干小さく（安定性重視）
-      params.speed_proportional_gain = base_speed_proportional_gain_ * std::min(1.0, 1.1 - speed_factor * 0.1);
-    }
-    
-    // 5. 最終的な安全範囲チェック
-    params.lookahead_gain = std::clamp(params.lookahead_gain, 0.4, 1.2);
-    params.lookahead_min_distance = std::clamp(params.lookahead_min_distance, 0.5, 3.0);
-    params.speed_proportional_gain = std::clamp(params.speed_proportional_gain, 0.8, 2.0);
-    
-    return params;
-  }
-  
-  // デバッグ情報取得
-  double getCurrentAverageSpeed() const {
-    if (!initialized_) return 0.0;
-    double sum = 0.0;
-    for (double speed : speed_history_) sum += speed;
-    return sum / speed_history_.size();
-  }
-  
-  double getReferenceSpeed() const { return reference_speed_; }
-};
-
-// 遅延補償システム（既存）
 class DelayCompensationSystem
 {
 private:
-  double system_delay_;
-  double max_angular_velocity_;
-  double compensation_gain_;
+  // 遅延補償パラメータ
+  double system_delay_;              // システム遅延時間（秒）
+  double max_angular_velocity_;      // 最大角速度制限（rad/s）
+  double compensation_gain_;         // 補償ゲイン
   
+  // 遅延予測用データ
   std::deque<double> velocity_history_;
   std::deque<double> steering_history_;
   rclcpp::Time last_update_time_;
@@ -152,8 +39,8 @@ private:
   
 public:
   DelayCompensationSystem() 
-    : system_delay_(0.2),
-      max_angular_velocity_(0.35),
+    : system_delay_(0.2),           // 0.2秒の固定遅延
+      max_angular_velocity_(0.35),  // 角速度制限 0.35rad/s
       compensation_gain_(1.0),
       initialized_(false)
   {
@@ -168,30 +55,38 @@ public:
     compensation_gain_ = compensation_gain;
   }
   
+  // 遅延補償用の先読み距離を計算
   double calculateDelayCompensationDistance(double current_velocity, const rclcpp::Time& current_time)
   {
+    // 初期化
     if (!initialized_) {
       last_update_time_ = current_time;
       initialized_ = true;
       return 0.0;
     }
     
+    // 速度履歴更新
     velocity_history_.pop_front();
     velocity_history_.push_back(current_velocity);
     
+    // 平均速度計算（ノイズ除去）
     double avg_velocity = 0.0;
     for (double v : velocity_history_) {
       avg_velocity += v;
     }
     avg_velocity /= velocity_history_.size();
     
+    // 遅延補償距離 = 平均速度 × 遅延時間 × 補償ゲイン
     double delay_distance = avg_velocity * system_delay_ * compensation_gain_;
-    delay_distance = std::clamp(delay_distance, 0.5, 5.0);
+    
+    // 最小・最大制限適用（安全性確保）
+    delay_distance = std::clamp(delay_distance, 0.5, 5.0); // 0.5m～5.0m
     
     last_update_time_ = current_time;
     return delay_distance;
   }
   
+  // 角速度制限適用（決勝戦仕様）
   double applyAngularVelocityLimit(double target_steering, const rclcpp::Time& current_time)
   {
     if (steering_history_.empty()) {
@@ -199,27 +94,42 @@ public:
       return target_steering;
     }
     
+    // 前回値との差分計算
     double last_steering = steering_history_.back();
     double steering_diff = target_steering - last_steering;
     
+    // 時間差分計算
     double dt = (current_time - last_update_time_).seconds();
     if (dt <= 0.001 || dt > 1.0) {
-      dt = 0.05;
+      dt = 0.05; // 20Hz前提のデフォルト値
     }
     
+    // 角速度計算
     double angular_velocity = steering_diff / dt;
     
+    // 角速度制限適用
     if (std::abs(angular_velocity) > max_angular_velocity_) {
       double limited_change = std::copysign(max_angular_velocity_ * dt, angular_velocity);
       target_steering = last_steering + limited_change;
+      
+      // デバッグ出力（制限適用時のみ）
+      static auto last_limit_log = current_time;
+      if ((current_time - last_limit_log).seconds() > 2.0) {
+        RCLCPP_INFO(rclcpp::get_logger("delay_compensation"), 
+          "角速度制限適用: %.3f → %.3f rad/s", 
+          angular_velocity, max_angular_velocity_);
+        last_limit_log = current_time;
+      }
     }
     
+    // 履歴更新
     steering_history_.pop_front();
     steering_history_.push_back(target_steering);
     
     return target_steering;
   }
   
+  // デバッグ情報取得
   double getAverageVelocity() const {
     if (velocity_history_.empty()) return 0.0;
     double sum = 0.0;
@@ -232,7 +142,7 @@ public:
   }
 };
 
-// 予測平滑化システム（既存）
+// 予測平滑化システム（既存を改良）
 class SteeringSmoothing
 {
 private:
@@ -242,6 +152,7 @@ private:
   rclcpp::Time last_time_;
   bool initialized_;
   
+  // パラメータ
   double smoothing_factor_;
   double max_steering_rate_;
   double prediction_horizon_;
@@ -269,6 +180,7 @@ public:
   
   double smoothSteering(double raw_steering, double current_velocity, const rclcpp::Time& current_time)
   {
+    // 初期化
     if (!initialized_) {
       last_steering_ = raw_steering;
       last_time_ = current_time;
@@ -276,35 +188,41 @@ public:
       return raw_steering;
     }
     
+    // 履歴更新
     steering_history_.pop_front();
     steering_history_.push_back(raw_steering);
     
     velocity_history_.pop_front();
     velocity_history_.push_back(current_velocity);
     
+    // 指数移動平均による基本平滑化
     double smoothed_steering = raw_steering;
     for (int i = steering_history_.size() - 2; i >= 0; --i) {
       smoothed_steering = smoothing_factor_ * smoothed_steering + 
                          (1.0 - smoothing_factor_) * steering_history_[i];
     }
     
+    // 速度適応調整
     double avg_velocity = 0.0;
     for (double v : velocity_history_) {
       avg_velocity += v;
     }
     avg_velocity /= velocity_history_.size();
     
+    // 高速時はより保守的に、低速時はより応答的に
     if (avg_velocity > 5.0) {
       double velocity_factor = std::min(1.2, avg_velocity / 10.0);
       smoothed_steering *= (0.8 + 0.2 / velocity_factor);
     }
     
+    // 履歴更新
     last_steering_ = smoothed_steering;
     last_time_ = current_time;
     
     return smoothed_steering;
   }
   
+  // デバッグ情報取得
   double getVibrationMagnitude() const
   {
     if (steering_history_.size() < 2) return 0.0;
@@ -318,7 +236,7 @@ public:
   }
 };
 
-// 軌道予測システム（既存）
+// 軌道予測システム（遅延補償対応版）
 class TrajectoryPredictor
 {
 private:
@@ -334,29 +252,37 @@ public:
     curvature_lookahead_gain_ = curvature_lookahead_gain;
   }
   
+  // 遅延補償対応の適応的先読み距離計算
   template<typename TrajectoryContainer>
   double calculateAdaptiveLookahead(
     double base_lookahead, 
     double current_velocity,
     const TrajectoryContainer& trajectory,
     size_t closest_idx,
-    double delay_compensation_distance = 0.0) const
+    double delay_compensation_distance = 0.0) const  // 遅延補償距離を追加
   {
     if (closest_idx >= trajectory.size() - 1) {
       return base_lookahead;
     }
     
+    // 前方の曲率を分析
     double local_curvature = calculateCurvature(trajectory, closest_idx);
-    double curvature_factor = 1.0 / (1.0 + std::abs(local_curvature) * curvature_lookahead_gain_);
-    double velocity_factor = std::sqrt(current_velocity / 10.0);
     
+    // 曲率に基づく調整係数
+    double curvature_factor = 1.0 / (1.0 + std::abs(local_curvature) * curvature_lookahead_gain_);
+    
+    // 速度に基づく調整
+    double velocity_factor = std::sqrt(current_velocity / 10.0); // 基準速度10m/s
+    
+    // 遅延補償距離を加算（重要な改良点）
     double adjusted_lookahead = (base_lookahead * curvature_factor * velocity_factor) + delay_compensation_distance;
     
+    // 30km/h走行時の最適化：8.3m/s前提の調整
     if (current_velocity > 7.0 && current_velocity < 10.0) {
-      adjusted_lookahead *= 1.1;
+      adjusted_lookahead *= 1.1; // 30km/h付近では若干長めに
     }
     
-    return std::clamp(adjusted_lookahead, 3.0, 20.0);
+    return std::clamp(adjusted_lookahead, 3.0, 20.0); // 安全範囲に制限
   }
   
 private:
@@ -367,6 +293,7 @@ private:
       return 0.0;
     }
     
+    // 3点による曲率近似
     const auto& p1 = trajectory[idx - 1].pose.position;
     const auto& p2 = trajectory[idx].pose.position;
     const auto& p3 = trajectory[idx + 1].pose.position;
@@ -388,15 +315,13 @@ private:
   }
 };
 
-// PIMPLパターンの実装クラス（車速適応制御対応）
+// PIMPLパターンの実装クラス（遅延補償対応）
 struct SimplePurePursuit::Impl {
-  std::unique_ptr<SpeedAdaptiveControlSystem> speed_adaptive_controller;  // 新規追加
-  std::unique_ptr<DelayCompensationSystem> delay_compensator;
+  std::unique_ptr<DelayCompensationSystem> delay_compensator;  // 新規追加
   std::unique_ptr<SteeringSmoothing> steering_smoother;
   std::unique_ptr<TrajectoryPredictor> trajectory_predictor;
   
   Impl() {
-    speed_adaptive_controller = std::make_unique<SpeedAdaptiveControlSystem>();
     delay_compensator = std::make_unique<DelayCompensationSystem>();
     steering_smoother = std::make_unique<SteeringSmoothing>();
     trajectory_predictor = std::make_unique<TrajectoryPredictor>();
@@ -405,45 +330,36 @@ struct SimplePurePursuit::Impl {
 
 SimplePurePursuit::SimplePurePursuit()
 : Node("simple_pure_pursuit"),
-  // 基本パラメータ（車速適応制御のベース値として使用）
+  // initialize parameters
   wheel_base_(declare_parameter<float>("wheel_base", 2.14)),
-  lookahead_gain_(declare_parameter<float>("lookahead_gain", 0.72)),
+  lookahead_gain_(declare_parameter<float>("lookahead_gain", 1.0)),
   lookahead_min_distance_(declare_parameter<float>("lookahead_min_distance", 1.0)),
-  speed_proportional_gain_(declare_parameter<float>("speed_proportional_gain", 1.15)),
+  speed_proportional_gain_(declare_parameter<float>("speed_proportional_gain", 1.0)),
   use_external_target_vel_(declare_parameter<bool>("use_external_target_vel", false)),
   external_target_vel_(declare_parameter<float>("external_target_vel", 0.0)),
   steering_tire_angle_gain_(declare_parameter<float>("steering_tire_angle_gain", 1.0)),
   pimpl_(std::make_unique<Impl>())
 {
-  // 既存パラメータ
+  // 既存の予測平滑化パラメータ
   auto smoothing_factor = declare_parameter<float>("steering_smoothing_factor", 0.75);
   auto max_steering_rate = declare_parameter<float>("max_steering_rate", 0.8);
   auto prediction_horizon = declare_parameter<float>("prediction_horizon", 2.5);
   auto curvature_lookahead_gain = declare_parameter<float>("curvature_lookahead_gain", 1.5);
   auto enable_predictive_control = declare_parameter<bool>("enable_predictive_control", true);
   
-  // 遅延補償パラメータ
+  // 新規：遅延補償パラメータ
   auto system_delay = declare_parameter<float>("system_delay", 0.2);
   auto max_angular_velocity = declare_parameter<float>("max_angular_velocity", 0.35);
   auto delay_compensation_gain = declare_parameter<float>("delay_compensation_gain", 1.0);
   auto enable_delay_compensation = declare_parameter<bool>("enable_delay_compensation", true);
-  
-  // 新規：車速適応制御パラメータ
-  auto reference_speed_kmh = declare_parameter<float>("reference_speed_kmh", 35.0);
-  auto enable_speed_adaptive_control = declare_parameter<bool>("enable_speed_adaptive_control", true);
   
   // システム初期化
   pimpl_->steering_smoother->setParameters(smoothing_factor, max_steering_rate, prediction_horizon);
   pimpl_->trajectory_predictor->setParameters(prediction_horizon, curvature_lookahead_gain);
   pimpl_->delay_compensator->setParameters(system_delay, max_angular_velocity, delay_compensation_gain);
   
-  // 車速適応制御初期化（35km/h基準パラメータを設定）
-  pimpl_->speed_adaptive_controller->setReferenceParameters(
-    reference_speed_kmh, lookahead_gain_, lookahead_min_distance_, speed_proportional_gain_);
-  
   enable_predictive_control_ = enable_predictive_control;
   enable_delay_compensation_ = enable_delay_compensation;
-  enable_speed_adaptive_control_ = enable_speed_adaptive_control;
   
   pub_cmd_ = create_publisher<AckermannControlCommand>("output/control_cmd", 1);
   pub_raw_cmd_ = create_publisher<AckermannControlCommand>("output/raw_control_cmd", 1);
@@ -459,12 +375,12 @@ SimplePurePursuit::SimplePurePursuit()
   timer_ =
     rclcpp::create_timer(this, get_clock(), 10ms, std::bind(&SimplePurePursuit::onTimer, this));
 
-  RCLCPP_INFO(get_logger(), "車速適応制御Pure Pursuit初期化完了");
-  RCLCPP_INFO(get_logger(), "車速適応制御: %s, 遅延補償: %s, 予測制御: %s", 
-              enable_speed_adaptive_control_ ? "有効" : "無効",
+  RCLCPP_INFO(get_logger(), "遅延補償Pure Pursuit初期化完了");
+  RCLCPP_INFO(get_logger(), "遅延補償: %s, 予測制御: %s", 
               enable_delay_compensation_ ? "有効" : "無効",
               enable_predictive_control_ ? "有効" : "無効");
-  RCLCPP_INFO(get_logger(), "基準速度: %.0f km/h での最適パラメータを使用", reference_speed_kmh);
+  RCLCPP_INFO(get_logger(), "角速度制限: %.3f rad/s, システム遅延: %.1f秒", 
+              max_angular_velocity, system_delay);
 }
 
 AckermannControlCommand zeroAckermannControlCommand(rclcpp::Time stamp)
@@ -481,6 +397,7 @@ AckermannControlCommand zeroAckermannControlCommand(rclcpp::Time stamp)
 
 void SimplePurePursuit::onTimer()
 {
+  // check data
   if (!subscribeMessageAvailable()) {
     return;
   }
@@ -488,44 +405,38 @@ void SimplePurePursuit::onTimer()
   size_t closet_traj_point_idx =
     findNearestIndex(trajectory_->points, odometry_->pose.pose.position);
 
+  // publish zero command
   AckermannControlCommand cmd = zeroAckermannControlCommand(get_clock()->now());
+
+  // get closest trajectory point from current position
   TrajectoryPoint closet_traj_point = trajectory_->points.at(closet_traj_point_idx);
 
+  // calc longitudinal speed and acceleration
   double target_longitudinal_vel =
     use_external_target_vel_ ? external_target_vel_ : closet_traj_point.longitudinal_velocity_mps;
   double current_longitudinal_vel = odometry_->twist.twist.linear.x;
 
-  // === 車速適応制御（新機能）===
-  double adaptive_lookahead_gain = lookahead_gain_;
-  double adaptive_lookahead_min_distance = lookahead_min_distance_;
-  double adaptive_speed_proportional_gain = speed_proportional_gain_;
-  
-  if (enable_speed_adaptive_control_) {
-    auto adaptive_params = pimpl_->speed_adaptive_controller->calculateAdaptiveParameters(current_longitudinal_vel);
-    adaptive_lookahead_gain = adaptive_params.lookahead_gain;
-    adaptive_lookahead_min_distance = adaptive_params.lookahead_min_distance;
-    adaptive_speed_proportional_gain = adaptive_params.speed_proportional_gain;
-  }
-
-  // 速度制御（適応ゲイン使用）
   cmd.longitudinal.speed = target_longitudinal_vel;
   cmd.longitudinal.acceleration =
-    adaptive_speed_proportional_gain * (target_longitudinal_vel - current_longitudinal_vel);
+    speed_proportional_gain_ * (target_longitudinal_vel - current_longitudinal_vel);
 
-  // === 遅延補償対応 lateral control（適応パラメータ使用）===
-  double lookahead_distance = adaptive_lookahead_gain * target_longitudinal_vel + adaptive_lookahead_min_distance;
+  // === 遅延補償対応 lateral control ===
+  double lookahead_distance = lookahead_gain_ * target_longitudinal_vel + lookahead_min_distance_;
   
+  // 遅延補償距離計算（重要な新機能）
   double delay_compensation_distance = 0.0;
   if (enable_delay_compensation_) {
     delay_compensation_distance = pimpl_->delay_compensator->calculateDelayCompensationDistance(
       current_longitudinal_vel, get_clock()->now());
   }
   
+  // 予測制御が有効な場合、適応的先読み距離を計算（遅延補償距離込み）
   if (enable_predictive_control_) {
     lookahead_distance = pimpl_->trajectory_predictor->calculateAdaptiveLookahead(
       lookahead_distance, target_longitudinal_vel, trajectory_->points, 
       closet_traj_point_idx, delay_compensation_distance);
   } else {
+    // 予測制御無効でも遅延補償は適用
     lookahead_distance += delay_compensation_distance;
   }
   
@@ -543,6 +454,7 @@ void SimplePurePursuit::onTimer()
              lookahead_distance;
     });
     
+  // 範囲チェック
   if (lookahead_point_itr == trajectory_->points.end()) {
     lookahead_point_itr = trajectory_->points.end() - 1;
   }
@@ -567,29 +479,40 @@ void SimplePurePursuit::onTimer()
   // === 遅延補償・予測平滑化適用 ===
   double final_steering = raw_steering;
   
+  // 1. 予測平滑化（既存機能）
   if (enable_predictive_control_) {
     final_steering = pimpl_->steering_smoother->smoothSteering(
       raw_steering, current_longitudinal_vel, get_clock()->now());
   }
   
+  // 2. 角速度制限適用（新規：決勝戦仕様）
   if (enable_delay_compensation_) {
     final_steering = pimpl_->delay_compensator->applyAngularVelocityLimit(
       final_steering, get_clock()->now());
   }
   
-  // 車速適応制御デバッグ出力（20秒間隔で詳細情報）
+  // デバッグ出力（15秒間隔で詳細情報）
   static auto last_debug_time = get_clock()->now();
-  if ((get_clock()->now() - last_debug_time).seconds() > 20.0) {
-    double current_speed_kmh = current_longitudinal_vel * 3.6;
-    double ref_speed_kmh = pimpl_->speed_adaptive_controller->getReferenceSpeed() * 3.6;
+  if ((get_clock()->now() - last_debug_time).seconds() > 15.0) {
+    double vibration_mag = pimpl_->steering_smoother->getVibrationMagnitude();
+    double comp_distance = pimpl_->delay_compensator->getCurrentCompensationDistance();
+    double avg_velocity = pimpl_->delay_compensator->getAverageVelocity();
     
-    RCLCPP_INFO(get_logger(), "=== 車速適応制御状況 ===");
-    RCLCPP_INFO(get_logger(), "現在速度: %.1f km/h (基準: %.1f km/h)", current_speed_kmh, ref_speed_kmh);
-    RCLCPP_INFO(get_logger(), "適応パラメータ:");
-    RCLCPP_INFO(get_logger(), "  lookahead_gain: %.3f (基準: %.3f)", adaptive_lookahead_gain, lookahead_gain_);
-    RCLCPP_INFO(get_logger(), "  lookahead_min_distance: %.2f (基準: %.2f)", adaptive_lookahead_min_distance, lookahead_min_distance_);
-    RCLCPP_INFO(get_logger(), "  speed_proportional_gain: %.3f (基準: %.3f)", adaptive_speed_proportional_gain, speed_proportional_gain_);
-    RCLCPP_INFO(get_logger(), "ステアリング: raw=%.3f → final=%.3f", raw_steering, final_steering);
+    RCLCPP_INFO(get_logger(), 
+      "=== 遅延補償制御状況 ===");
+    RCLCPP_INFO(get_logger(), 
+      "速度: %.1f m/s (%.1f km/h), 補償距離: %.2f m", 
+      avg_velocity, avg_velocity * 3.6, comp_distance);
+    RCLCPP_INFO(get_logger(), 
+      "ステアリング: raw=%.3f → smooth=%.3f → final=%.3f", 
+      raw_steering, 
+      enable_predictive_control_ ? pimpl_->steering_smoother->smoothSteering(raw_steering, current_longitudinal_vel, get_clock()->now()) : raw_steering,
+      final_steering);
+    RCLCPP_INFO(get_logger(), 
+      "先読み距離: base=%.2f + delay=%.2f = total=%.2f m", 
+      lookahead_distance - delay_compensation_distance, delay_compensation_distance, lookahead_distance);
+    RCLCPP_INFO(get_logger(), 
+      "振動抑制度: %.4f", vibration_mag);
     
     last_debug_time = get_clock()->now();
   }

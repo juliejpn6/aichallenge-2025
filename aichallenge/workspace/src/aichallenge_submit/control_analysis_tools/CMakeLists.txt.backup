@@ -1,0 +1,88 @@
+cmake_minimum_required(VERSION 3.8)
+project(control_analysis_tools)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# 依存関係
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(autoware_auto_control_msgs REQUIRED)
+find_package(tier4_vehicle_msgs REQUIRED)
+find_package(autoware_auto_vehicle_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+
+# ブラウザ版リアルタイム監視システム
+add_executable(browser_realtime_monitor
+  src/browser_realtime_monitor.cpp
+)
+
+target_include_directories(browser_realtime_monitor PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+ament_target_dependencies(browser_realtime_monitor
+  rclcpp
+  std_msgs
+  autoware_auto_control_msgs
+  tier4_vehicle_msgs
+  autoware_auto_vehicle_msgs
+  nav_msgs
+)
+
+# PlotJuggler用データ配信システム
+add_executable(plotjuggler_data_publisher
+  src/plotjuggler_data_publisher.cpp
+)
+
+target_include_directories(plotjuggler_data_publisher PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+ament_target_dependencies(plotjuggler_data_publisher
+  rclcpp
+  std_msgs
+  autoware_auto_control_msgs
+  tier4_vehicle_msgs
+  autoware_auto_vehicle_msgs
+  nav_msgs
+)
+
+# ログ収集システム
+add_executable(control_data_logger
+  src/control_data_logger.cpp
+)
+
+target_include_directories(control_data_logger PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+ament_target_dependencies(control_data_logger
+  rclcpp
+  std_msgs
+  autoware_auto_control_msgs
+  tier4_vehicle_msgs
+  autoware_auto_vehicle_msgs
+  nav_msgs
+)
+
+# インストール設定
+install(TARGETS
+  browser_realtime_monitor
+  plotjuggler_data_publisher
+  control_data_logger
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY
+  launch
+  config
+  DESTINATION share/${PROJECT_NAME}/
+)
+
+ament_package()

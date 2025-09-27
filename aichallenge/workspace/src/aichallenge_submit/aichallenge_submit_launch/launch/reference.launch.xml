@@ -7,6 +7,11 @@
   <arg name="map_path" default="$(find-pkg-share aichallenge_submit_launch)/map"/>
   <arg name="vehicle_model" default="racing_kart"  description="vehicle model name"/>
   <arg name="sensor_model" default="racing_kart_sensor_kit" description="sensor model name"/>
+  
+  <!-- Control Analysis Tools パラメータ -->
+  <arg name="enable_control_analysis" default="true" description="enable control analysis tools for PlotJuggler"/>
+  <arg name="analysis_publish_rate" default="20.0" description="control analysis data publish rate"/>
+  
   <!-- Optional parameters -->
   <!-- Map -->
   <arg name="lanelet2_map_file" default="lanelet2_map.osm" description="lanelet2 map file name"/>
@@ -119,7 +124,7 @@
       <!-- Customizable -->
       <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen">
             <param name="pitlane_trajectory" value="$(find-pkg-share simple_trajectory_generator)/data/pitlane_trajectory.csv"/>
-            <param name="raceline_trajectory" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_30km_from_garage.csv"/>
+            <param name="raceline_trajectory" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_from_garage.csv"/>
             <param name="z" value="6.5"/>
             <param name="use_lap_switching" value="true"/>
       </node>
@@ -127,53 +132,55 @@
     </group>
   </group>
 
-  <!-- Pure Pursuit -->
+  <!-- ========================================= -->
+  <!-- 車速適応制御対応Pure Pursuit（段階3完成版）  -->
+  <!-- ========================================= -->
   <let name="steering_tire_angle_gain_var" value="2.4" if="$(var simulation)"/>
   <let name="steering_tire_angle_gain_var" value="3.639" unless="$(var simulation)"/>
 
 <node pkg="simple_pure_pursuit" exec="simple_pure_pursuit" name="simple_pure_pursuit_node" output="screen">
+  
+  <!-- =========================== -->
+  <!-- 基本制御パラメータ（35km/h基準値） -->
+  <!-- =========================== -->
   <param name="use_external_target_vel" value="false"/>
   <param name="external_target_vel" value="12.0"/>
   
-  <!-- 【変更前】lookahead_gain value="0.8" -->
-  <!-- 【パターン3変更点】軽度短縮でバランス調整 -->
-  <!-- 小さくする: 適度に近くを見る → 精度と安定性のバランス -->
-  <param name="lookahead_gain" value="0.72"/>
-  
-  <!-- 【変更前】lookahead_min_distance value="2.0" -->  
-  <!-- 【パターン3】最小距離は軽度調整 -->
-  <param name="lookahead_min_distance" value="3.0"/>
-  
-  <!-- 【変更前】speed_proportional_gain value="1.0" -->
-  <!-- 【パターン3変更点】タイム短縮のための速度制御強化 -->
-  <!-- 大きくする: より積極的な加減速 → 33秒台への挑戦 -->
+  <!-- 【基準値】35km/h走行時のベストパラメータ -->
+  <!-- 車速適応制御により自動調整されます -->
+  <param name="lookahead_gain" value="0.64"/>
+  <param name="lookahead_min_distance" value="1.0"/>
   <param name="speed_proportional_gain" value="1.15"/>
-  
   <param name="steering_tire_angle_gain" value="$(var steering_tire_angle_gain_var)"/>
 
-  <!-- === パターン3: バランス最適化のための予測平滑化パラメータ === -->
+  <!-- =========================== -->
+  <!-- 【新規】車速適応制御パラメータ      -->
+  <!-- =========================== -->
+  <!-- 車速適応制御システム有効化 -->
+  <param name="enable_speed_adaptive_control" value="true"/>
+  
+  <!-- 基準速度（km/h）-->
+  <!-- この速度での上記パラメータが最適値として扱われます -->
+  <param name="reference_speed_kmh" value="25.0"/>
+
+  <!-- =========================== -->
+  <!-- 遅延補償制御パラメータ（調整済み）  -->
+  <!-- =========================== -->
+  <param name="enable_delay_compensation" value="true"/>
+  <param name="system_delay" value="0.2"/>
+  <param name="max_angular_velocity" value="0.35"/>
+  <param name="delay_compensation_gain" value="0.9"/>
+
+  <!-- =========================== -->
+  <!-- 予測平滑化パラメータ（修正済み）     -->
+  <!-- =========================== -->
   <param name="enable_predictive_control" value="true"/>
-  
-  <!-- 【変更前】steering_smoothing_factor value="1.8" -->
-  <!-- 【パターン3】バランスの取れた平滑化 -->
-  <!-- オーバーステア抑制とレスポンス性の最適バランス -->
   <param name="steering_smoothing_factor" value="1.80"/>
-  
-  <!-- 【変更前】max_steering_rate value="2.5" -->
-  <!-- 【パターン3】中程度のステアリング制限でバランス重視 -->
-  <!-- 急激な変化は抑制しつつ、必要な機敏さは保持 -->
-  <param name="max_steering_rate" value="1.70"/>
-  
-  <!-- 【変更前】prediction_horizon value="3.0" -->
-  <!-- 【パターン3】予測時間は軽度調整（バランス重視） -->
+  <param name="max_steering_rate" value="0.35"/>
   <param name="prediction_horizon" value="2.3"/>
-  
-  <!-- 【変更前】curvature_lookahead_gain value="2.5" -->
-  <!-- 【パターン3変更点】中程度の短縮効果 -->
-  <!-- 先読みしすぎを防止しつつ、極端な短縮は避ける -->
   <param name="curvature_lookahead_gain" value="2.0"/>
 
-  <!-- 循環軌道対応パラメータ（そのまま維持） -->
+  <!-- 循環軌道対応パラメータ（そのまま維持）-->
   <param name="enable_circular_trajectory" value="true"/>
   <param name="circular_search_distance_ratio" value="0.8"/>
 
@@ -181,6 +188,17 @@
   <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
   <remap from="output/control_cmd" to="/control/command/control_cmd"/>
 </node>
+
+  <!-- Control Analysis Tools - PlotJuggler用データ配信 -->
+  <group if="$(var enable_control_analysis)">
+    <log message="Starting Control Analysis Tools for PlotJuggler"/>
+    
+    <node pkg="control_analysis_tools" exec="plotjuggler_data_publisher" 
+          name="plotjuggler_data_publisher" output="screen">
+      <param name="publish_rate_hz" value="$(var analysis_publish_rate)"/>
+      <param name="delay_calculation_window" value="100"/>
+    </node>
+  </group>
 
   <!-- Map -->
   <group>
