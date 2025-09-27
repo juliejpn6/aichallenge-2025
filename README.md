@@ -1,14 +1,32 @@
-# aichallenge-2025
 
-本リポジトリでは、2025年度に実施される自動運転AIチャレンジでご利用いただく開発環境を提供します。参加者の皆様には、Autoware Universe をベースとした自動運転ソフトウェアを開発し、予選大会では End to End シミュレーション空間を走行するレーシングカートにインテグレートしていただきます。開発した自動運転ソフトウェアで、安全に走行しながらタイムアタックに勝利することが目標です。また、決勝大会では本物のレーシングカートへのインテグレーションを行っていただきます。
+## 🔧 v4.0 実装済みシステム
 
-This repository provides a development environment use in the Automotive AI Challenge which will be held in 2025. For the preliminaries, participants will develop autonomous driving software based on Autoware Universe and integrate it into a racing kart that drives in the End to End simulation space. The goal is to win in time attack while driving safely with the developed autonomous driving software. Also, for the finals, qualifiers will integrate it into a real racing kart.
+### **段階1: 遅延補償制御**
+* **0.2秒遅延対策**: 先読み距離計算による補償
+* **角速度制限**: 決勝戦仕様0.35rad/s厳守
 
-## ドキュメント / Documentation
+### **段階3: 車速適応制御**
+* **指定した速度に応じた動的調整**
+* **3パラメータ最適化**: lookahead_gain、lookahead_min_distance、speed_proportional_gain
+* **リアルタイム適応**: 毎10ms周期での自動調整
 
-下記ページにて、本大会に関する情報 (ルールの詳細や環境構築方法) を提供する予定です。ご確認の上、奮って大会へご参加ください。
+## 📊 実際の改善効果
 
-Toward the competition, we will update the following pages to provide information such as rules and how to set up your dev environment. Please follow them. We are looking forward your participation!
+**低速走行時（20km/h）**:
+* より機敏な制御（lookahead_min_distance小）
+* 安定性重視（lookahead_gain大）
 
-- [日本語ページ](https://automotiveaichallenge.github.io/aichallenge-documentation-2025/)
-- [English Page](https://automotiveaichallenge.github.io/aichallenge-documentation-2025/en/)
+**高速走行時（35km/h以上）**:
+* 基準値での安定走行
+* 適度な保守性
+
+**全速度域**:
+* 遅延を考慮した先読み制御
+* 角速度制限による安全性確保
+
+## 🔧 新しいパラメータ
+
+| パラメータ | デフォルト値 | 効果 |
+|-----------|-------------|------|
+| enable_speed_adaptive_control | true | 車速適応制御の有効/無効 |
+| reference_speed_kmh | 35.0 | 基準速度（km/h） |
