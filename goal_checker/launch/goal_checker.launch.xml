@@ -37,7 +37,7 @@
   -->
   
   <!-- 初期速度 (km/h) -  -->
-  <arg name="initial_speed" default="28" 
+  <arg name="initial_speed" default="16" 
        description="初期車速 (km/h) - 1周目で使用する速度"/>
   
   <!-- 速度増加幅 (km/h) - 毎周回この値だけ速度が増加します -->
