@@ -7,11 +7,6 @@
   <arg name="map_path" default="$(find-pkg-share aichallenge_submit_launch)/map"/>
   <arg name="vehicle_model" default="racing_kart"  description="vehicle model name"/>
   <arg name="sensor_model" default="racing_kart_sensor_kit" description="sensor model name"/>
-  <arg name="map_path"/>
-  <arg name="use_sim_time"/>
-  <arg name="simulation"/>
-  <arg name="launch_vehicle_interface"/>
-
   <!-- Optional parameters -->
   <!-- Map -->
   <arg name="lanelet2_map_file" default="lanelet2_map.osm" description="lanelet2 map file name"/>
@@ -95,7 +90,7 @@
       <arg name="output_twist_name" value="twist"/>
       <arg name="output_twist_with_covariance_name" value="twist_with_covariance"/>
       <arg name="proc_stddev_vx_c" value="10.0"/>
-      <arg name="proc_stddev_wz_c" value="10.0"/>
+      <arg name="proc_stddev_wz_c" value="5.0"/>
       <arg name="pose_additional_delay" value="$(var pose_additional_delay_var)"/>
       <arg name="extend_state_step" value="100"/>
     </include>
@@ -123,222 +118,25 @@
 
       <!-- Customizable -->
       <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen">
-            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_16km.csv"/>
+            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_30km_from_garage.csv"/>
             <param name="z" value="6.5"/>
       </node>
       
     </group>
   </group>
 
-<!-- ========================================= -->
-<!-- Pure Pursuit パラメータ設定 -->
-<!-- ========================================= -->
-  <let name="steering_tire_angle_gain_var" value="1.5" if="$(var simulation)"/>
+  <!-- Pure Pursuit -->
+  <let name="steering_tire_angle_gain_var" value="1.50" if="$(var simulation)"/>
   <let name="steering_tire_angle_gain_var" value="1.639" unless="$(var simulation)"/>
 
   <node pkg="simple_pure_pursuit" exec="simple_pure_pursuit" name="simple_pure_pursuit_node" output="screen">
-    <!-- ========================================= -->
-    <!-- 基本パラメータ -->
-    <!-- ========================================= -->
-    <param name="use_external_target_vel" value="false"/>
-    <param name="external_target_vel" value="5.0"/>
-    
-    <!-- ★★★ 変更：lookahead_gain → lookahead_time ★★★ -->
-    <param name="lookahead_time" value="1.8"/>
-    <!-- 
-      【説明】先読み時間（秒）
-      - 常に「○○秒先」を見るという概念
-      - 速度に関係なく、時間は一定
-      
-      【計算例】
-      - 速度 5 m/s (18 km/h): Lookahead = 5 × 2.0 = 10.0m
-      - 速度 8.33 m/s (30 km/h): Lookahead = 8.33 × 2.0 = 16.7m
-      → 常に2秒先を見る
-      
-      【推奨値】
-      - 1.8秒: タイトコース向け（やや短め）
-      - 2.0秒: バランス型（推奨）★
-      - 2.2秒: 高速コース向け（やや長め）
-      
-      【調整方法】
-      - 高速時に間に合わない → 値を上げる（2.2秒など）
-      - 低速コーナーで膨らむ → 値を下げる（1.8秒など）
-      
-      【重要】
-      元の設定(lookahead_gain=1.2, min=2.0)から移行
-      時速18km/h時: 旧8.0m → 新10.0m（やや先を見るように改善）
-      時速30km/h時: 旧12.0m → 新16.7m（高速時の安定性向上）
-    -->
-    
-    <param name="lookahead_min_distance" value="2.0"/>
-    <!-- 
-      【説明】最小Lookahead距離（メートル）
-      - 低速・停止時の最小保証距離
-      - 計算式: Lookahead = max(速度 × 先読み時間, 最小距離)
-      
-      【推奨値】
-      - 2.0m: 元の設定を維持（推奨）★
-      - 3.0m: 低速時の安定性重視
-      - 1.5m: タイトコーナー重視
-      
-      【調整方法】
-      - 低速時に不安定 → 値を上げる（3.0mなど）
-      - 低速時に膨らむ → 値を下げる（1.5mなど）
-    -->
-    
+    <param name="use_external_target_vel" value="true"/>
+    <param name="external_target_vel" value="3.0"/>
+    <param name="lookahead_gain" value="0.5"/>
+    <param name="lookahead_min_distance" value="3.5"/>
     <param name="speed_proportional_gain" value="1.0"/>
     <param name="steering_tire_angle_gain" value="$(var steering_tire_angle_gain_var)"/>
-    
-    <!-- ========================================= -->
-    <!-- 曲率適応型パラメータ -->
-    <!-- ========================================= -->
-    <param name="straight_threshold" value="0.007"/>
-    <!-- 
-      【説明】直線と判定する曲率の閾値
-      - 値を小さくする → より敏感に曲がりを検出
-      - 値を大きくする → 緩いカーブも直線扱い
-      
-      【推奨値】0.007～0.008
-    -->
-    
-    <param name="gentle_curve_threshold" value="0.7"/>
-    <!-- 
-      【説明】緩やかなカーブと急カーブを分ける閾値
-      - この値未満 → 緩やかなカーブ
-      - この値以上 → 急カーブ
-      
-      【推奨値】0.7～0.10
-    -->
-    
-    <param name="steering_delay" value="0.30"/>
-    <!-- 
-      【説明】ステアリング遅延補償（秒）
-      - 実測: 平均250ms、最大270ms
-      - 推奨: 0.30秒（余裕を持たせた設定）
-      
-      【調整方法】
-      - それでも間に合わない → 0.35秒
-      - 過剰補償気味 → 0.25秒
-      
-      【重要】
-      実際の先読み時間 = lookahead_time - steering_delay
-      例: 2.0秒 - 0.30秒 = 実質1.7秒先
-    -->
-    
-    <!-- ========================================= -->
-    <!-- 平滑化パラメータ -->
-    <!-- ========================================= -->
-    <param name="lookahead_factor_change_rate" value="0.3"/>
-    <!-- 
-      【説明】Lookahead Factorの変化率（0.0～1.0）
-      - 値を大きくする → 変化が速い（応答性↑、安定性↓）
-      - 値を小さくする → 変化が遅い（応答性↓、安定性↑）
-      
-      【推奨値】
-      - 0.2: 非常に緩やか（超安定）
-      - 0.3: バランス型（推奨）★
-      - 0.4: やや速い（高応答）
-    -->
-    
-    <!-- ========================================= -->
-    <!-- ステアリング状態考慮パラメータ -->
-    <!-- ========================================= -->
-    <param name="cornering_threshold" value="0.05"/>
-    <!-- 
-      【説明】コーナー走行中と判定する閾値（ラジアン）
-      - 0.05 rad ≒ 3度
-      
-      【推奨値】
-      - 0.03 (約2度): 敏感
-      - 0.05 (約3度): バランス（推奨）★
-      - 0.07 (約4度): 鈍感
-    -->
-    
-    <param name="corner_exit_lookahead_boost" value="1.0"/>
-    <!-- 
-      【説明】コーナー出口でのLookahead延長率
-      - 1.10 = 通常より10%長くLookaheadを取る
-      
-      【推奨値】
-      - 1.00: ブースト無効
-      - 1.10: 控えめ（10%延長）
-      - 1.15: バランス（15%延長）★
-      
-      【注意】1.20以上は推奨しません
-    -->
-    
-    <!-- ========================================= -->
-    <!-- 道路タイプ別調整係数 -->
-    <!-- ========================================= -->
-    
-    <!-- 【直線】のパラメータ -->
-    <param name="straight_lookahead_factor" value="1.0"/>
-    <param name="straight_speed_limit_factor" value="1.0"/>
-    <!-- 
-      直線では：
-      - Lookahead調整なし（1.0）
-      - 速度制限なし（1.0 = 100%）
-      → フルスピードで走行
-    -->
-    
-    <!-- 【緩やかなカーブ】のパラメータ -->
-    <param name="gentle_curve_lookahead_factor" value="1.0"/>
-    <param name="gentle_curve_speed_limit_factor" value="0.4"/>
-    <!-- 
-      緩やかなカーブでは：
-      - Lookahead調整なし（1.0）
-      - 速度を40%に制限
-      
-      【重要】この値が速度制限の要！
-      - 0.4 = 目標速度の40%
-      - 調整範囲: 0.35～0.5
-      - 値を下げる → より安定（遅い）
-      - 値を上げる → より速い（リスク増）
-    -->
-    
-    <!-- 【急カーブ】のパラメータ -->
-    <param name="sharp_curve_lookahead_factor" value="1.0"/>
-    <param name="sharp_curve_speed_limit_factor" value="0.0"/>
-    <!-- 
-      急カーブでは：
-      - Lookahead調整なし（1.0）
-      - 速度を0%に制限（完全停止）
-      
-      【重要】急カーブでは大幅減速が必須！
-      - 0.0 = 停止
-      - 調整範囲: 0.0～0.35
-      - 0.35以上は推奨しません（曲がれない）
-      
-      【注意】
-      物理的に速度が出すぎると、どんな制御でも曲がれません。
-    -->
-    
-    <!-- ========================================= -->
-    <!-- 速度制限係数の調整戦略 -->
-    <!-- ========================================= -->
-    <!-- 
-    ■ 安定性重視（完走優先）
-      - gentle_curve: 0.35
-      - sharp_curve: 0.0
-      → とにかく完走！
-    
-    ■ バランス型（推奨）
-      - gentle_curve: 0.4
-      - sharp_curve: 0.0
-      → 安定性とタイムのバランス
-    
-    ■ アグレッシブ型（タイムアタック）
-      - gentle_curve: 0.5
-      - sharp_curve: 0.2
-      → 速いがリスク高！要テスト
-    
-    【調整の基本ルール】
-    1. まずは推奨値で走らせる
-    2. 問題があるコーナーの種類を特定
-    3. 0.05刻みで少しずつ調整
-    4. 安定したら、少しずつ値を上げる
-    -->
-    
+
     <remap from="input/kinematics" to="/localization/kinematic_state"/>
     <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
     <remap from="output/control_cmd" to="/control/command/control_cmd"/>
