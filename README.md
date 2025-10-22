@@ -21,38 +21,17 @@ Autoware-Microをベースに、高速走行とカーブ走行を最適化した
 - すべてのパラメータに日本語コメント付き
 - launchファイルで簡単に調整可能
 - ビルド不要でパラメータ変更可能
-
----
-
-## 📁 リポジトリ構成
-
-```
-aichallenge-2025/
-├── README.md                          # このファイル（プロジェクト概要）
-├── docs/                              # ドキュメント
-│   ├── PURE_PURSUIT.md               # Pure Pursuit制御の詳細説明
-│   ├── GOAL_CHECKER.md               # Goal Line Checkerの詳細説明
-│   ├── PARAMETERS.md                 # パラメータ一覧と調整ガイド
-│   └── SETUP.md                      # セットアップ手順
-│
-├── simple_pure_pursuit.cpp            # Pure Pursuit制御ノード（メイン処理）
-├── simple_pure_pursuit.hpp            # Pure Pursuitヘッダーファイル
-├── goal_line_checker_node.cpp         # ゴールライン判定ノード
-├── reference_launch.xml               # メインのlaunchファイル
-└── goal_checker_launch.xml            # Goal Checker用launchファイル
-```
-
+  
 ---
 
 ## 🚀 クイックスタート
 
 ### 1. 環境要件
-- Ubuntu 24.04
+- Ubuntu 22.04
 - ROS 2（Autoware-Micro対応版）
 - 自動運転AIチャレンジ環境
 
 ### 2. セットアップ
-詳細な手順は [docs/SETUP.md](docs/SETUP.md) を参照してください。
 
 ```bash
 # このリポジトリをクローン
@@ -75,38 +54,6 @@ ros2 launch aichallenge_submit_launch reference.launch.xml
 
 - **速度調整**: `goal_checker_launch.xml` を編集
 - **走行調整**: `reference_launch.xml` のPure Pursuitセクションを編集
-
-詳細は [docs/PARAMETERS.md](docs/PARAMETERS.md) を参照してください。
-
----
-
-## 📖 ドキュメント
-
-| ドキュメント | 内容 |
-|-------------|------|
-| [docs/PURE_PURSUIT.md](docs/PURE_PURSUIT.md) | Pure Pursuit制御の仕組みと設定方法 |
-| [docs/GOAL_CHECKER.md](docs/GOAL_CHECKER.md) | Goal Line Checkerの仕組みと設定方法 |
-| [docs/PARAMETERS.md](docs/PARAMETERS.md) | 全パラメータの詳細説明と調整ガイド |
-| [docs/SETUP.md](docs/SETUP.md) | セットアップとGithubへのアップロード手順 |
-
----
-
-## 🎯 推奨される使い方
-
-### 初めての方
-1. まず [docs/SETUP.md](docs/SETUP.md) でセットアップ
-2. デフォルト設定で走行テスト
-3. [docs/PARAMETERS.md](docs/PARAMETERS.md) を見ながら少しずつ調整
-
-### パラメータ調整したい方
-1. [docs/PARAMETERS.md](docs/PARAMETERS.md) で調整したい項目を確認
-2. launchファイルを編集
-3. 再起動して効果を確認（ビルド不要！）
-
-### 仕組みを理解したい方
-1. [docs/PURE_PURSUIT.md](docs/PURE_PURSUIT.md) でPure Pursuitの原理を学習
-2. [docs/GOAL_CHECKER.md](docs/GOAL_CHECKER.md) で自動管理の仕組みを理解
-3. ソースコードを読んでさらに深く理解
 
 ---
 
@@ -149,37 +96,6 @@ ros2 launch aichallenge_submit_launch reference.launch.xml
 <!-- 0.0～0.3で調整。急カーブは慎重に！ -->
 ```
 
-詳細は [docs/PARAMETERS.md](docs/PARAMETERS.md) を参照してください。
-
----
-
-## 🐛 トラブルシューティング
-
-### Q1: ビルドエラーが出る
-→ [docs/SETUP.md](docs/SETUP.md) の依存関係を確認してください
-
-### Q2: パラメータを変更したのに反映されない
-→ ビルドは不要です。ノードを再起動してください
-```bash
-# Ctrl+Cで停止後、再度実行
-ros2 launch aichallenge_submit_launch reference.launch.xml
-```
-
-### Q3: カーブで曲がれない
-→ 速度が速すぎる可能性があります。`speed_limit_factor`を下げてください
-
-### Q4: 低速時に不安定
-→ `lookahead_min_distance`を大きくしてください（2.0 → 3.0）
-
----
-
-## 📝 変更履歴
-
-### v1.0.0 (2025-10-22)
-- 初回リリース
-- 時間ベースPure Pursuit制御を実装
-- Goal Line Checker自動管理機能を実装
-- プログラム初心者向けドキュメント整備
 
 ---
 
