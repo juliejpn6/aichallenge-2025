@@ -1,0 +1,402 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- Essential parameters -->
+  <arg name="vehicle_id" default="$(env VEHICLE_ID default)" description="vehicle specific ID"/>
+  <arg name="simulation" description="used for sensor kit param"/>
+  <arg name="use_sim_time"/>
+  <arg name="map_path" default="$(find-pkg-share aichallenge_submit_launch)/map"/>
+  <arg name="vehicle_model" default="racing_kart"  description="vehicle model name"/>
+  <arg name="sensor_model" default="racing_kart_sensor_kit" description="sensor model name"/>
+  <arg name="map_path"/>
+  <arg name="use_sim_time"/>
+  <arg name="simulation"/>
+  <arg name="launch_vehicle_interface"/>
+
+  <!-- Optional parameters -->
+  <!-- Map -->
+  <arg name="lanelet2_map_file" default="lanelet2_map.osm" description="lanelet2 map file name"/>
+  <arg name="pointcloud_map_file" default="pointcloud_map.pcd" description="pointcloud map file name"/>
+
+  <!-- Vehicle -->
+  <arg name="launch_vehicle_interface" default="false"/>
+  <log message="echo launch param use_sim_time: $(var use_sim_time) launch_vehicle_interface: $(var launch_vehicle_interface) sensor_model: $(var sensor_model)"/>
+
+  <!-- Global parameters -->
+  <group scoped="false">
+    <include file="$(find-pkg-share global_parameter_loader)/launch/global_params.launch.py">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+    </include>
+  </group>
+
+  <group>
+    <arg name="model_file" default="$(find-pkg-share tier4_vehicle_launch)/urdf/vehicle.xacro" description="path to the file of model settings (*.xacro)"/>
+    <arg name="config_dir" default="$(find-pkg-share racing_kart_sensor_kit_description)/config"/>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" exec="robot_state_publisher">
+      <param name="robot_description" value="$(command 'xacro $(var model_file) vehicle_model:=$(var vehicle_model) sensor_model:=$(var sensor_model) config_dir:=$(var config_dir) simulation:=$(var simulation)' 'warn')"/>
+    </node>
+  </group>
+
+  <!-- Sensing -->
+  <group>
+    <push-ros-namespace namespace="sensing"/>
+    <!-- Vehicle Velocity Converter  -->
+    <include file="$(find-pkg-share vehicle_velocity_converter)/launch/vehicle_velocity_converter.launch.xml">
+      <arg name="input_vehicle_velocity_topic" value="/vehicle/status/velocity_status"/>
+      <arg name="output_twist_with_covariance" value="/sensing/vehicle_velocity_converter/twist_with_covariance"/>
+      <arg name="config_file" value="$(find-pkg-share aichallenge_submit_launch)/config/vehicle_velocity_converter.param.yaml"/>
+    </include>
+    <group>
+      <push-ros-namespace namespace="imu"/>
+      <arg name="imu_corrector_param_file" default="$(find-pkg-share imu_corrector)/config/imu_corrector.param.yaml"/>
+      <include file="$(find-pkg-share imu_corrector)/launch/imu_corrector.launch.xml">
+        <arg name="input_topic" value="imu_raw"/>
+        <arg name="output_topic" value="imu_data"/>
+        <arg name="param_file" value="$(var imu_corrector_param_file)"/>
+      </include>
+    </group>
+    <group>
+      <push-ros-namespace namespace="gnss"/>
+      <include file="$(find-pkg-share racing_kart_gnss_poser)/launch/gnss_poser.launch.xml">
+        <arg name="input_topic_fix" value="nav_sat_fix"/>
+        <arg name="output_topic_gnss_pose" value="pose"/>
+        <arg name="output_topic_gnss_fixed" value="gnss_fixed"/>
+        <arg name="output_topic_gnss_pose_cov" value="pose_with_covariance"/>
+      </include>
+    </group>
+  </group>
+
+    <!-- Localization -->
+  <let name="pose_additional_delay_var" value="0.0" />
+  <group>
+    <push-ros-namespace namespace="localization"/>
+    <include file="$(find-pkg-share gyro_odometer)/launch/gyro_odometer.launch.xml">
+      <arg name="input_vehicle_twist_with_covariance_topic" value="/sensing/vehicle_velocity_converter/twist_with_covariance"/>
+      <arg name="input_imu_topic" value="/sensing/imu/imu_data"/>
+      <arg name="output_twist_with_covariance_topic" value="/localization/twist_estimator/twist_with_covariance"/>
+      <arg name="output_twist_with_covariance_raw_topic" value="/localization/twist_estimator/twist_with_covariance_raw"/>
+    </include>
+
+    <node pkg="imu_gnss_poser" exec="imu_gnss_poser_node" name="imu_gnss_poser" output="screen"/>
+
+    <include file="$(find-pkg-share ekf_localizer)/launch/ekf_localizer.launch.xml">
+      <arg name="enable_yaw_bias_estimation" value="false"/>
+      <arg name="tf_rate" value="30.0"/>
+      <arg name="twist_smoothing_steps" value="1"/>
+      <arg name="pose_smoothing_steps" value="1"/>
+      <arg name="input_initial_pose_name" value="/localization/initial_pose3d"/>
+      <arg name="input_pose_with_cov_name" value="/localization/imu_gnss_poser/pose_with_covariance"/>
+      <arg name="input_twist_with_cov_name" value="/localization/twist_estimator/twist_with_covariance"/>
+      <arg name="output_odom_name" value="kinematic_state"/>
+      <arg name="output_pose_name" value="pose"/>
+      <arg name="output_pose_with_covariance_name" value="/localization/pose_with_covariance"/>
+      <arg name="output_biased_pose_name" value="biased_pose"/>
+      <arg name="output_biased_pose_with_covariance_name" value="biased_pose_with_covariance"/>
+      <arg name="output_twist_name" value="twist"/>
+      <arg name="output_twist_with_covariance_name" value="twist_with_covariance"/>
+      <arg name="proc_stddev_vx_c" value="10.0"/>
+      <arg name="proc_stddev_wz_c" value="10.0"/>
+      <arg name="pose_additional_delay" value="$(var pose_additional_delay_var)"/>
+      <arg name="extend_state_step" value="100"/>
+    </include>
+
+    <!-- twist2accel -->
+    <group>
+      <node pkg="twist2accel" exec="twist2accel" name="twist2accel" output="screen">
+        <param name="accel_lowpass_gain" value="0.9"/>
+        <param name="use_odom" value="true"/>
+        <remap from="input/odom" to="/localization/kinematic_state"/>
+        <remap from="input/twist" to="/localization/twist_estimator/twist_with_covariance"/>
+        <remap from="output/accel" to="/localization/acceleration"/>
+      </node>
+    </group>
+
+  </group>
+
+  <!-- Planning -->
+  <group>
+    <push-ros-namespace namespace="planning"/>
+
+    <!-- scenario_planning -->
+    <group>
+      <push-ros-namespace namespace="scenario_planning"/>
+
+      <!-- Customizable -->
+      <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen">
+            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_16km.csv"/>
+            <param name="z" value="6.5"/>
+      </node>
+      
+    </group>
+  </group>
+
+<!-- ========================================= -->
+<!-- Pure Pursuit パラメータ設定 -->
+<!-- ========================================= -->
+  <let name="steering_tire_angle_gain_var" value="1.5" if="$(var simulation)"/>
+  <let name="steering_tire_angle_gain_var" value="1.639" unless="$(var simulation)"/>
+
+  <node pkg="simple_pure_pursuit" exec="simple_pure_pursuit" name="simple_pure_pursuit_node" output="screen">
+    <!-- ========================================= -->
+    <!-- 基本パラメータ -->
+    <!-- ========================================= -->
+    <param name="use_external_target_vel" value="false"/>
+    <param name="external_target_vel" value="5.0"/>
+    
+    <!-- ★★★ 変更：lookahead_gain → lookahead_time ★★★ -->
+    <param name="lookahead_time" value="1.8"/>
+    <!-- 
+      【説明】先読み時間（秒）
+      - 常に「○○秒先」を見るという概念
+      - 速度に関係なく、時間は一定
+      
+      【計算例】
+      - 速度 5 m/s (18 km/h): Lookahead = 5 × 2.0 = 10.0m
+      - 速度 8.33 m/s (30 km/h): Lookahead = 8.33 × 2.0 = 16.7m
+      → 常に2秒先を見る
+      
+      【推奨値】
+      - 1.8秒: タイトコース向け（やや短め）
+      - 2.0秒: バランス型（推奨）★
+      - 2.2秒: 高速コース向け（やや長め）
+      
+      【調整方法】
+      - 高速時に間に合わない → 値を上げる（2.2秒など）
+      - 低速コーナーで膨らむ → 値を下げる（1.8秒など）
+      
+      【重要】
+      元の設定(lookahead_gain=1.2, min=2.0)から移行
+      時速18km/h時: 旧8.0m → 新10.0m（やや先を見るように改善）
+      時速30km/h時: 旧12.0m → 新16.7m（高速時の安定性向上）
+    -->
+    
+    <param name="lookahead_min_distance" value="2.0"/>
+    <!-- 
+      【説明】最小Lookahead距離（メートル）
+      - 低速・停止時の最小保証距離
+      - 計算式: Lookahead = max(速度 × 先読み時間, 最小距離)
+      
+      【推奨値】
+      - 2.0m: 元の設定を維持（推奨）★
+      - 3.0m: 低速時の安定性重視
+      - 1.5m: タイトコーナー重視
+      
+      【調整方法】
+      - 低速時に不安定 → 値を上げる（3.0mなど）
+      - 低速時に膨らむ → 値を下げる（1.5mなど）
+    -->
+    
+    <param name="speed_proportional_gain" value="1.0"/>
+    <param name="steering_tire_angle_gain" value="$(var steering_tire_angle_gain_var)"/>
+    
+    <!-- ========================================= -->
+    <!-- 曲率適応型パラメータ -->
+    <!-- ========================================= -->
+    <param name="straight_threshold" value="0.006"/>
+    <!-- 
+      【説明】直線と判定する曲率の閾値
+      - 値を小さくする → より敏感に曲がりを検出
+      - 値を大きくする → 緩いカーブも直線扱い
+      
+      【推奨値】0.007～0.008
+    -->
+    
+    <param name="gentle_curve_threshold" value="0.4"/>
+    <!-- 
+      【説明】緩やかなカーブと急カーブを分ける閾値
+      - この値未満 → 緩やかなカーブ
+      - この値以上 → 急カーブ
+      
+      【推奨値】0.7～0.10
+    -->
+    
+    <param name="steering_delay" value="0.22"/>
+    <!-- 
+      【説明】ステアリング遅延補償（秒）
+      - 実測: 平均250ms、最大270ms
+      - 推奨: 0.30秒（余裕を持たせた設定）
+      
+      【調整方法】
+      - それでも間に合わない → 0.35秒
+      - 過剰補償気味 → 0.25秒
+      
+      【重要】
+      実際の先読み時間 = lookahead_time - steering_delay
+      例: 2.0秒 - 0.30秒 = 実質1.7秒先
+    -->
+    
+    <!-- ========================================= -->
+    <!-- 平滑化パラメータ -->
+    <!-- ========================================= -->
+    <param name="lookahead_factor_change_rate" value="0.3"/>
+    <!-- 
+      【説明】Lookahead Factorの変化率（0.0～1.0）
+      - 値を大きくする → 変化が速い（応答性↑、安定性↓）
+      - 値を小さくする → 変化が遅い（応答性↓、安定性↑）
+      
+      【推奨値】
+      - 0.2: 非常に緩やか（超安定）
+      - 0.3: バランス型（推奨）★
+      - 0.4: やや速い（高応答）
+    -->
+    
+    <!-- ========================================= -->
+    <!-- ステアリング状態考慮パラメータ -->
+    <!-- ========================================= -->
+    <param name="cornering_threshold" value="0.05"/>
+    <!-- 
+      【説明】コーナー走行中と判定する閾値（ラジアン）
+      - 0.05 rad ≒ 3度
+      
+      【推奨値】
+      - 0.03 (約2度): 敏感
+      - 0.05 (約3度): バランス（推奨）★
+      - 0.07 (約4度): 鈍感
+    -->
+    
+    <param name="corner_exit_lookahead_boost" value="1.0"/>
+    <!-- 
+      【説明】コーナー出口でのLookahead延長率
+      - 1.10 = 通常より10%長くLookaheadを取る
+      
+      【推奨値】
+      - 1.00: ブースト無効
+      - 1.10: 控えめ（10%延長）
+      - 1.15: バランス（15%延長）★
+      
+      【注意】1.20以上は推奨しません
+    -->
+    
+    <!-- ========================================= -->
+    <!-- 道路タイプ別調整係数 -->
+    <!-- ========================================= -->
+    
+    <!-- 【直線】のパラメータ -->
+    <param name="straight_lookahead_factor" value="1.0"/>
+    <param name="straight_speed_limit_factor" value="1.0"/>
+    <!-- 
+      直線では：
+      - Lookahead調整なし（1.0）
+      - 速度制限なし（1.0 = 100%）
+      → フルスピードで走行
+    -->
+    
+    <!-- 【緩やかなカーブ】のパラメータ -->
+    <param name="gentle_curve_lookahead_factor" value="1.0"/>
+    <param name="gentle_curve_speed_limit_factor" value="0.4"/>
+    <!-- 
+      緩やかなカーブでは：
+      - Lookahead調整なし（1.0）
+      - 速度を40%に制限
+      
+      【重要】この値が速度制限の要！
+      - 0.4 = 目標速度の40%
+      - 調整範囲: 0.35～0.5
+      - 値を下げる → より安定（遅い）
+      - 値を上げる → より速い（リスク増）
+    -->
+    
+    <!-- 【急カーブ】のパラメータ -->
+    <param name="sharp_curve_lookahead_factor" value="1.0"/>
+    <param name="sharp_curve_speed_limit_factor" value="0.0"/>
+    <!-- 
+      急カーブでは：
+      - Lookahead調整なし（1.0）
+      - 速度を0%に制限（完全停止）
+      
+      【重要】急カーブでは大幅減速が必須！
+      - 0.0 = 停止
+      - 調整範囲: 0.0～0.35
+      - 0.35以上は推奨しません（曲がれない）
+      
+      【注意】
+      物理的に速度が出すぎると、どんな制御でも曲がれません。
+    -->
+    
+    <!-- ========================================= -->
+    <!-- 速度制限係数の調整戦略 -->
+    <!-- ========================================= -->
+    <!-- 
+    ■ 安定性重視（完走優先）
+      - gentle_curve: 0.35
+      - sharp_curve: 0.0
+      → とにかく完走！
+    
+    ■ バランス型（推奨）
+      - gentle_curve: 0.4
+      - sharp_curve: 0.0
+      → 安定性とタイムのバランス
+    
+    ■ アグレッシブ型（タイムアタック）
+      - gentle_curve: 0.5
+      - sharp_curve: 0.2
+      → 速いがリスク高！要テスト
+    
+    【調整の基本ルール】
+    1. まずは推奨値で走らせる
+    2. 問題があるコーナーの種類を特定
+    3. 0.05刻みで少しずつ調整
+    4. 安定したら、少しずつ値を上げる
+    -->
+    
+    <remap from="input/kinematics" to="/localization/kinematic_state"/>
+    <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
+    <remap from="output/control_cmd" to="/control/command/control_cmd"/>
+  </node>
+
+  <!-- Map -->
+  <group>
+    <push-ros-namespace namespace="map"/>
+
+    <!-- map_container -->
+    <node_container pkg="rclcpp_components" exec="component_container" name="map_container" namespace="">
+
+      <!-- map_loader::Lanelet2MapLoaderNode -->
+      <composable_node pkg="map_loader" plugin="Lanelet2MapLoaderNode" name="lanelet2_map_loader" namespace="">
+        <remap from="output/lanelet2_map" to="vector_map" />
+        <param name="lanelet2_map_path" value="$(var map_path)/$(var lanelet2_map_file)" />
+        <param from="$(find-pkg-share aichallenge_submit_launch)/config/map/lanelet2_map_loader.param.yaml" />
+        <extra_arg name="use_intra_process_comms" value="false" />
+      </composable_node>
+
+      <!-- map_loader::Lanelet2MapVisualizationNode -->
+      <composable_node pkg="map_loader" plugin="Lanelet2MapVisualizationNode" name="lanelet2_map_visualization" namespace="">
+        <remap from="input/lanelet2_map" to="vector_map" />
+        <remap from="output/lanelet2_map_marker" to="vector_map_marker" />
+        <param name="lanelet2_map_path" value="$(var map_path)/$(var lanelet2_map_file)" />
+        <param from="$(find-pkg-share aichallenge_submit_launch)/config/map/lanelet2_map_loader.param.yaml" />
+        <extra_arg name="use_intra_process_comms" value="false" />
+      </composable_node>
+
+      <!-- map_tf_generator::VectorMapTFGeneratorNode -->
+      <composable_node pkg="map_tf_generator" plugin="VectorMapTFGeneratorNode" name="vector_map_tf_generator" namespace="">
+        <param name="map_frame" value="map" />
+        <param name="viewer_frame" value="viewer" />
+        <extra_arg name="use_intra_process_comms" value="false" />
+      </composable_node>
+
+    </node_container>
+
+  </group> <!-- map -->
+
+  <!-- vehicle -->
+  <group if="$(var launch_vehicle_interface)">
+    <include file="$(find-pkg-share raw_vehicle_cmd_converter)/launch/raw_vehicle_converter.launch.xml">
+      <arg name="converter_param_path" value="$(find-pkg-share aichallenge_submit_launch)/config/converter.param.yaml"/>
+      <arg name="csv_path_accel_map" value="$(find-pkg-share aichallenge_submit_launch)/data/accel_map.csv"/>
+      <arg name="csv_path_brake_map" value="$(find-pkg-share aichallenge_submit_launch)/data/brake_map.csv"/>
+
+      <arg name="max_throttle" value="1.0"/>
+      <arg name="max_brake" value="1.0"/>
+      <arg name="convert_accel_cmd" value="true"/>
+      <arg name="convert_brake_cmd" value="true"/>
+      <arg name="convert_steer_cmd" value="false"/>
+
+      <arg name="input_control_cmd" value="/control/command/control_cmd"/>
+      <arg name="input_odometry" value="/localization/kinematic_state"/>
+      <arg name="input_steering" value="/vehicle/status/steering_status"/>
+      <arg name="output_actuation_cmd" value="/control/command/actuation_cmd"/>
+    </include>
+  </group>
+
+</launch>

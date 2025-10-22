@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- 
+  =================================================
+  ゴールライン通過判定ノード パラメータ設定
+  =================================================
+  
+  このファイルを編集することで、ビルドせずに
+  周回ごとの速度変化を調整できます。
+  
+  【パラメータ説明】
+  - initial_speed: 1周目で使用する初期速度 (km/h)
+  - speed_increment: 周回ごとに増加する速度 (km/h)
+  - max_speed: 到達する最高速度の上限 (km/h)
+  
+  【使用例】
+  ◆ ゆっくりスタート、少しずつ加速
+    initial_speed="10" speed_increment="1" max_speed="20"
+    → 1周目:10km/h, 2周目:11km/h, ... 11周目以降:20km/h
+  
+  ◆ 速いスタート、大きく加速
+    initial_speed="25" speed_increment="5" max_speed="50"
+    → 1周目:25km/h, 2周目:30km/h, 3周目:35km/h, ...
+  
+  ◆ 固定速度で走行 (加速なし)
+    initial_speed="30" speed_increment="0" max_speed="30"
+    → 全周回30km/h固定
+  
+  =================================================
+  -->
+  
+  <!-- 
+  ====================
+  速度パラメータ設定
+  ====================
+  ※ここの数値を変更して調整してください
+  -->
+  
+  <!-- 初期速度 (km/h) -  -->
+  <arg name="initial_speed" default="28" 
+       description="初期車速 (km/h) - 1周目で使用する速度"/>
+  
+  <!-- 速度増加幅 (km/h) - 毎周回この値だけ速度が増加します -->
+  <!-- 例: 2 → 毎周回2km/hずつ増加 (30→32→34...) -->
+  <!--     5 → 毎周回5km/hずつ増加 (30→35→40...) -->
+  <!--     0 → 速度変化なし (固定速度) -->
+  <arg name="speed_increment" default="2" 
+       description="周回ごとの速度増加幅 (km/h)"/>
+  
+  <!-- 最高速度 (km/h) - この速度を超えないように制限されます -->
+  <arg name="max_speed" default="32" 
+       description="最高速度の上限 (km/h)"/>
+  
+  
+  <!-- 
+  ====================
+  ゴール判定パラメータ
+  ====================
+  通常は変更不要です
+  -->
+  
+  <!-- ゴールエリア進入判定距離 (m) -->
+  <!-- この距離以内に入るとゴールエリアに進入したと判定 -->
+  <arg name="in_threshold" default="3.0" 
+       description="ゴールエリア進入判定距離 (m)"/>
+  
+  <!-- ゴールエリア退出判定距離 (m) -->
+  <!-- この距離以上離れるとゴールライン通過と判定 -->
+  <arg name="out_threshold" default="3.0" 
+       description="ゴールエリア退出判定距離 (m)"/>
+  
+  
+  <!-- 
+  ====================
+  ノード起動設定
+  ====================
+  -->
+  
+  <node pkg="goal_checker" 
+        exec="goal_line_checker_node" 
+        name="goal_line_checker_node" 
+        output="screen">
+    
+    <!-- 速度制御パラメータをノードに渡す -->
+    <param name="initial_speed" value="$(var initial_speed)"/>
+    <param name="speed_increment" value="$(var speed_increment)"/>
+    <param name="max_speed" value="$(var max_speed)"/>
+    
+    <!-- ゴール判定パラメータをノードに渡す -->
+    <param name="in_threshold" value="$(var in_threshold)"/>
+    <param name="out_threshold" value="$(var out_threshold)"/>
+    
+  </node>
+  
+</launch>
